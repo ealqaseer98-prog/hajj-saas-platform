@@ -35,18 +35,38 @@ export default function VisaTrackingPage() {
   const { data: travellers = [], isLoading } = useQuery({
     queryKey: ['visa-travellers', filterStatus],
     queryFn: async () => {
-      let q = supabase.from('travellers')
-        .select('id, full_name_ar, full_name_en, cpr_number, passport_number, visa_status, gender, phone, package_type')
-        .order('full_name_ar')
+      const baseFields = 'id, full_name_ar, full_name_en, cpr_number, passport_number, visa_status, gender, phone'
+      const fieldsWithPackage = `${baseFields}, package_type`
+
+      let q = supabase.from('travellers').select(fieldsWithPackage).order('full_name_ar')
       if (filterStatus !== 'all') q = q.eq('visa_status', filterStatus)
-      const { data } = await q
+      const { data, error } = await q
+
+      // Fallback for environments where package_type is not yet present in DB.
+      if (error) {
+        let fallbackQ = supabase.from('travellers').select(baseFields).order('full_name_ar')
+        if (filterStatus !== 'all') fallbackQ = fallbackQ.eq('visa_status', filterStatus)
+        const { data: fallbackData, error: fallbackError } = await fallbackQ
+        if (fallbackError) throw fallbackError
+        return ((fallbackData ?? []).map(t => ({ ...t, package_type: null })) as Traveller[])
+      }
+
       return (data ?? []) as Traveller[]
     },
   })
 
-  const filteredTravellers = travellers.filter(t =>
-    t.full_name_ar.toLowerCase().includes(search.trim().toLowerCase())
-  )
+  const { data: allTravellers = [] } = useQuery({
+    queryKey: ['visa-travellers-all-counts'],
+    queryFn: async () => {
+      const { data } = await supabase.from('travellers').select('id, visa_status')
+      return (data ?? []) as Pick<Traveller, 'id' | 'visa_status'>[]
+    },
+  })
+
+  const searchTerm = search.trim().toLowerCase()
+  const filteredTravellers = searchTerm
+    ? travellers.filter(t => (t.full_name_ar ?? '').toLowerCase().includes(searchTerm))
+    : travellers
 
   const { data: history = [] } = useQuery({
     queryKey: ['visa-history', historyModal],
@@ -98,9 +118,9 @@ export default function VisaTrackingPage() {
   })
 
   const counts = {
-    pending:  travellers.filter(t => t.visa_status === 'pending').length,
-    approved: travellers.filter(t => t.visa_status === 'approved').length,
-    rejected: travellers.filter(t => t.visa_status === 'rejected').length,
+    pending:  allTravellers.filter(t => t.visa_status === 'pending').length,
+    approved: allTravellers.filter(t => t.visa_status === 'approved').length,
+    rejected: allTravellers.filter(t => t.visa_status === 'rejected').length,
   }
 
   const toggleBulk = (id: string) => {
