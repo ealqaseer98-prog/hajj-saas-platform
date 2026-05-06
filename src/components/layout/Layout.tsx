@@ -1,10 +1,11 @@
 // src/components/layout/Layout.tsx
+import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import {
   LayoutDashboard, Users, Plane, BookOpen, Building2,
   LogOut, Wallet, ShieldCheck, FileStack, Bell,
-  MessageSquare, ClipboardList
+  MessageSquare, ClipboardList, MoreHorizontal
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -41,17 +42,26 @@ const navSections = [
   },
 ]
 
-const mobileNavItems = [
+const mobilePrimaryItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'لوحة التحكم' },
   { to: '/travellers', icon: Users, label: 'المسافرون' },
   { to: '/trips', icon: Plane, label: 'الرحلات' },
   { to: '/accounting', icon: BookOpen, label: 'المحاسبة' },
+]
+
+const mobileMoreItems = [
   { to: '/hotels', icon: Building2, label: 'الفنادق' },
+  { to: '/visa-tracking', icon: ShieldCheck, label: 'تتبع التصاريح' },
+  { to: '/documents', icon: FileStack, label: 'المستندات' },
+  { to: '/reminders', icon: Bell, label: 'التذكيرات وواتساب' },
+  { to: '/accounts', icon: Wallet, label: 'الحسابات' },
+  { to: '/trip-manifest', icon: ClipboardList, label: 'كشف الرحلة' },
 ]
 
 export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const [isMoreOpen, setIsMoreOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -123,7 +133,7 @@ export default function Layout() {
       {/* Mobile bottom navigation */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)] z-40">
         <div className="grid grid-cols-5">
-          {mobileNavItems.map(({ to, icon: Icon, label }) => (
+          {mobilePrimaryItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -138,8 +148,48 @@ export default function Layout() {
               <span className="leading-none">{label}</span>
             </NavLink>
           ))}
+          <button
+            onClick={() => setIsMoreOpen(true)}
+            className="flex flex-col items-center justify-center gap-1 py-2 text-[11px] text-gray-500 transition-colors"
+          >
+            <MoreHorizontal size={18} />
+            <span className="leading-none">المزيد</span>
+          </button>
         </div>
       </nav>
+
+      {/* Mobile more panel */}
+      {isMoreOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <button
+            aria-label="إغلاق القائمة"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setIsMoreOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl p-4 max-h-[75vh] overflow-y-auto shadow-2xl">
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-3" />
+            <p className="text-sm font-semibold text-gray-700 mb-3">المزيد</p>
+            <div className="space-y-1">
+              {mobileMoreItems.map(({ to, icon: Icon, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={() => setIsMoreOpen(false)}
+                  className={({ isActive }) =>
+                    clsx(
+                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
+                      isActive ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                    )
+                  }
+                >
+                  <Icon size={16} className="shrink-0" />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
