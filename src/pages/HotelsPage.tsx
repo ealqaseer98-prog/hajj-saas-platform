@@ -57,12 +57,12 @@ export default function HotelsPage() {
   const otherHotels  = hotels.filter((h: any) => !h.city?.includes('مكة') && !h.city?.includes('المدينة'))
 
   return (
-    <div className="p-6 space-y-5" dir="rtl">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-5" dir="rtl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-800">الفنادق وتوزيع الغرف</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
           <select
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full md:w-auto border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             value={filterTrip}
             onChange={e => setFilterTrip(e.target.value)}
           >
@@ -70,7 +70,7 @@ export default function HotelsPage() {
             {trips.map(t => <option key={t.id} value={t.id}>{t.trip_name}</option>)}
           </select>
           <button onClick={() => { setSel({}); setModal(true) }}
-            className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            className="flex items-center justify-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium w-full md:w-auto">
             <Plus size={15} /> إضافة فندق
           </button>
         </div>
@@ -130,10 +130,10 @@ export default function HotelsPage() {
 
       {/* Add hotel modal */}
       {modal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3" dir="rtl">
+        <div className="fixed inset-0 bg-black/40 flex items-stretch md:items-center justify-center md:p-4 z-50">
+          <div className="bg-white w-full h-full rounded-none p-6 space-y-3 overflow-y-auto md:h-auto md:max-w-md md:rounded-2xl md:shadow-2xl" dir="rtl">
             <h2 className="text-lg font-bold">إضافة فندق</h2>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {[
                 ['اسم الفندق *', 'hotel_name', 'text'],
                 ['المدينة *',    'city',        'text'],
@@ -153,7 +153,7 @@ export default function HotelsPage() {
                 {trips.map(t => <option key={t.id} value={t.id}>{t.trip_name}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {[['تاريخ تسجيل الدخول','check_in_date'],['تاريخ تسجيل الخروج','check_out_date']].map(([label,key]) => (
                 <div key={key}>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
