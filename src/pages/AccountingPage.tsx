@@ -13,11 +13,11 @@ export default function AccountingPage() {
   const [tab, setTab] = useState<Tab>('invoices')
 
   return (
-    <div className="p-6 space-y-5" dir="rtl">
+    <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-5" dir="rtl">
       <h1 className="text-2xl font-bold text-gray-800">المحاسبة</h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-full md:w-fit overflow-x-auto whitespace-nowrap">
         {([
           ['invoices',  'الفواتير',   <FileText size={15} />],
           ['receipts',  'الإيصالات',  <ReceiptIcon size={15} />],
@@ -28,7 +28,7 @@ export default function AccountingPage() {
             onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               tab === key ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-600 hover:text-gray-800'
-            }`}
+            } shrink-0`}
           >
             {icon} {label}
           </button>
@@ -72,7 +72,9 @@ function InvoicesTab() {
   })
 
   const del = useMutation({
-    mutationFn: (id: string) => supabase.from('invoices').delete().eq('id', id).throwOnError(),
+    mutationFn: async (id: string) => {
+      await supabase.from('invoices').delete().eq('id', id).throwOnError()
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
   })
 
@@ -173,7 +175,9 @@ function ReceiptsTab() {
   })
 
   const del = useMutation({
-    mutationFn: (id: string) => supabase.from('receipts').delete().eq('id', id).throwOnError(),
+    mutationFn: async (id: string) => {
+      await supabase.from('receipts').delete().eq('id', id).throwOnError()
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['receipts'] }),
   })
 
@@ -260,7 +264,9 @@ function ExpensesTab() {
   })
 
   const del = useMutation({
-    mutationFn: (id: string) => supabase.from('expenses').delete().eq('id', id).throwOnError(),
+    mutationFn: async (id: string) => {
+      await supabase.from('expenses').delete().eq('id', id).throwOnError()
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
   })
 
@@ -361,26 +367,48 @@ function AccountingTable({ columns, rows, onDelete }: { columns: string[]; rows:
       {rows.length === 0 ? (
         <div className="p-10 text-center text-gray-400">لا توجد بيانات</div>
       ) : (
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              {columns.map(c => <th key={c} className="text-right px-4 py-3 font-medium text-gray-600">{c}</th>)}
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
+        <>
+          <table className="hidden md:table w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                {columns.map(c => <th key={c} className="text-right px-4 py-3 font-medium text-gray-600">{c}</th>)}
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map((row, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  {row.map((cell, j) => <td key={j} className="px-4 py-3 text-gray-700">{cell}</td>)}
+                  <td className="px-4 py-3">
+                    <button onClick={() => onDelete(i)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="md:hidden p-3 space-y-3">
             {rows.map((row, i) => (
-              <tr key={i} className="hover:bg-gray-50">
-                {row.map((cell, j) => <td key={j} className="px-4 py-3 text-gray-700">{cell}</td>)}
-                <td className="px-4 py-3">
+              <div key={i} className="border border-gray-100 rounded-xl p-3 bg-white shadow-sm">
+                <div className="space-y-2 text-sm">
+                  {columns.map((col, idx) => (
+                    <div key={col} className="flex items-start justify-between gap-3">
+                      <span className="text-gray-500 shrink-0">{col}</span>
+                      <span className="text-gray-700 text-left">{row[idx]}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end">
                   <button onClick={() => onDelete(i)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
                     <Trash2 size={14} />
                   </button>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </>
       )}
     </div>
   )
@@ -409,8 +437,8 @@ function Textarea({ label, value, onChange }: { label: string; value: string; on
 
 function Modal({ title, children, onClose, onSave, saving }: { title: string; children: React.ReactNode; onClose: () => void; onSave: () => void; saving: boolean }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3 max-h-[90vh] overflow-y-auto" dir="rtl">
+    <div className="fixed inset-0 bg-black/40 flex items-stretch md:items-center justify-center md:p-4 z-50">
+      <div className="bg-white w-full h-full rounded-none p-6 space-y-3 overflow-y-auto md:h-auto md:max-w-md md:rounded-2xl md:shadow-2xl md:max-h-[90vh]" dir="rtl">
         <h2 className="text-lg font-bold text-gray-800">{title}</h2>
         {children}
         <div className="flex gap-3 pt-2">
