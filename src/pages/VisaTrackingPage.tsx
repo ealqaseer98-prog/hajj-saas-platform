@@ -20,6 +20,11 @@ const PACKAGE_LABELS: Record<PackageType, string> = {
   tasreeh_only: 'فقط تصريح',
 }
 
+const TASREEH_SOURCE_LABELS: Record<'bahrain' | 'saudi', string> = {
+  bahrain: 'البحرين',
+  saudi: 'السعودية',
+}
+
 export default function VisaTrackingPage() {
   const qc       = useQueryClient()
   const navigate = useNavigate()
@@ -35,7 +40,7 @@ export default function VisaTrackingPage() {
   const { data: travellers = [], isLoading } = useQuery({
     queryKey: ['visa-travellers', filterStatus],
     queryFn: async () => {
-      const baseFields = 'id, full_name_ar, full_name_en, cpr_number, passport_number, visa_status, gender, phone'
+      const baseFields = 'id, full_name_ar, full_name_en, cpr_number, visa_status, gender, phone, tasreeh_source'
       const fieldsWithPackage = `${baseFields}, package_type`
 
       let q = supabase.from('travellers').select(fieldsWithPackage).order('full_name_ar')
@@ -218,7 +223,7 @@ export default function VisaTrackingPage() {
                 </th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">المسافر</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">رقم البطاقة</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">جواز السفر</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">مصدر التصريح</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الباقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الحالة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">تغيير الحالة</th>
@@ -244,7 +249,11 @@ export default function VisaTrackingPage() {
                       </button>
                     </td>
                     <td className="px-4 py-3 font-mono text-gray-600">{t.cpr_number}</td>
-                    <td className="px-4 py-3 font-mono text-gray-600">{t.passport_number ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
+                        ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
+                        : '—'}
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{t.package_type ? PACKAGE_LABELS[t.package_type] : '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border}`}>

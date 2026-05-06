@@ -19,6 +19,17 @@ const PACKAGE_LABELS: Record<PackageType, string> = {
   tasreeh_only: 'فقط تصريح',
 }
 
+const TASREEH_SOURCE_LABELS: Record<'bahrain' | 'saudi', string> = {
+  bahrain: 'البحرين',
+  saudi: 'السعودية',
+}
+
+const GROUP_NAME_LABELS: Record<'alammar' | 'sarhan' | 'other', string> = {
+  alammar: 'العمار',
+  sarhan: 'السرحان',
+  other: 'أخرى',
+}
+
 const EMPTY: Partial<Traveller> = {
   cpr_number: '', full_name_ar: '', full_name_en: '',
   phone: '', email: '', passport_number: '',
@@ -133,9 +144,10 @@ export default function TravellersPage() {
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الاسم بالعربية</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">الاسم بالإنجليزية</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">رقم البطاقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الجنس</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">مصدر التصريح</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">اسم المجموعة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الباقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">التصريح</th>
                 <th className="px-4 py-3"></th>
@@ -145,12 +157,21 @@ export default function TravellersPage() {
               {filtered.map(t => (
                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-800">{t.full_name_ar}</td>
-                  <td className="px-4 py-3 text-gray-600">{t.full_name_en}</td>
                   <td className="px-4 py-3 text-gray-600 font-mono">{t.cpr_number}</td>
                   <td className="px-4 py-3">
                     {t.gender === 'male'   ? <span className="text-blue-600 text-xs font-medium">👨 ذكر</span>
                    : t.gender === 'female' ? <span className="text-pink-600 text-xs font-medium">👩 أنثى</span>
                    : <span className="text-gray-300 text-xs">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
+                      ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {t.group_name === 'alammar' || t.group_name === 'sarhan' || t.group_name === 'other'
+                      ? GROUP_NAME_LABELS[t.group_name]
+                      : '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{t.package_type ? PACKAGE_LABELS[t.package_type] : '—'}</td>
                   <td className="px-4 py-3">
