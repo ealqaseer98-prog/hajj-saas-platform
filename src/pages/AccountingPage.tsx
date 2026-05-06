@@ -161,7 +161,13 @@ function ReceiptsTab() {
   const save = useMutation({
     mutationFn: async (r: Partial<Receipt>) => {
       const num = await nextNumber('receipts', 'receipt_number', 'RCP')
-      await supabase.from('receipts').insert({ ...r, receipt_number: num }).throwOnError()
+      await supabase.from('receipts').insert({ 
+        ...r, 
+        receipt_number: num,
+        traveller_id: r.traveller_id || null,
+        invoice_id:   r.invoice_id   || null,
+        account_id:   r.account_id   || null,
+      }).throwOnError()
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['receipts', 'invoices', 'accounts-list'] }); setModal(false) },
   })
