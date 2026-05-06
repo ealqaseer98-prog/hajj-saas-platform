@@ -20,20 +20,23 @@ export const useAuthStore = create<AuthState>()(
       login: async (username, password) => {
         set({ loading: true })
         try {
-          // Use Postgres pgcrypto to verify password — never exposes hash to client
           const { data, error } = await supabase
-            .rpc('verify_user_login', { p_username: username, p_password: password })
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .eq('password', password)
+            .single()
 
-          if (error || !data || data.length === 0) {
+          if (error || !data) {
             set({ loading: false })
             return { error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }
           }
 
           const user: AppUser = {
-            id:        data[0].id,
-            username:  data[0].username,
-            full_name: data[0].full_name,
-            role:      data[0].role,
+            id:        data.id,
+            username:  data.username,
+            full_name: data.full_name,
+            role:      data.role,
           }
           set({ user, loading: false })
           return {}
