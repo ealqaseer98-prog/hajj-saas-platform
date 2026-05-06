@@ -90,7 +90,7 @@ export default function TravellersPage() {
   const openEdit = (t: Traveller) => { setSelected(t); setModal('edit') }
 
   return (
-    <div className="p-6 space-y-5" dir="rtl">
+    <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-5" dir="rtl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">المسافرون</h1>
@@ -108,7 +108,7 @@ export default function TravellersPage() {
         </button>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-col md:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
@@ -119,10 +119,10 @@ export default function TravellersPage() {
             className="w-full border border-gray-200 rounded-lg pr-10 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-full md:w-auto">
           {(['all','male','female'] as const).map(v => (
             <button key={v} onClick={() => setGenderFilter(v)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`flex-1 md:flex-none px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 genderFilter === v ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
               }`}>
               {v === 'all' ? 'الكل' : v === 'male' ? 'ذكور' : 'إناث'}
@@ -140,7 +140,8 @@ export default function TravellersPage() {
             لا يوجد مسافرون
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+          <table className="hidden md:table w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الاسم بالعربية</th>
@@ -196,6 +197,49 @@ export default function TravellersPage() {
               ))}
             </tbody>
           </table>
+          <div className="md:hidden p-3 space-y-3">
+            {filtered.map(t => (
+              <div key={t.id} className="border border-gray-100 rounded-xl p-3 bg-white shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold text-gray-800">{t.full_name_ar}</h3>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISA_LABELS[t.visa_status].className}`}>
+                    {VISA_LABELS[t.visa_status].label}
+                  </span>
+                </div>
+                <div className="mt-2 space-y-1.5 text-sm text-gray-600">
+                  <p><span className="text-gray-500">رقم البطاقة: </span><span className="font-mono">{t.cpr_number}</span></p>
+                  <p>
+                    <span className="text-gray-500">الجنس: </span>
+                    {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
+                  </p>
+                  <p>
+                    <span className="text-gray-500">اسم المجموعة: </span>
+                    {t.group_name === 'alammar' || t.group_name === 'sarhan' || t.group_name === 'other'
+                      ? GROUP_NAME_LABELS[t.group_name]
+                      : '—'}
+                  </p>
+                  <p>
+                    <span className="text-gray-500">مصدر التصريح: </span>
+                    {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
+                      ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
+                      : '—'}
+                  </p>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                  <button onClick={() => navigate(`/travellers/${t.id}`)}
+                    className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                    title="عرض الملف الشخصي"><Eye size={15} /></button>
+                  <button onClick={() => openEdit(t)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="تعديل"><Edit2 size={15} /></button>
+                  <button onClick={() => window.confirm('هل أنت متأكد من الحذف؟') && del.mutate(t.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="حذف"><Trash2 size={15} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
 
