@@ -139,7 +139,7 @@ export default function VisaTrackingPage() {
   const historyTraveller = travellers.find(t => t.id === historyModal)
 
   return (
-    <div className="p-6 space-y-5" dir="rtl">
+    <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-5" dir="rtl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">تتبع التصاريح</h1>
@@ -166,23 +166,23 @@ export default function VisaTrackingPage() {
 
       {/* Bulk action bar */}
       {bulkSelected.size > 0 && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3 flex-wrap">
-          <span className="text-sm font-medium text-emerald-800">{bulkSelected.size} مسافر محدد</span>
-          <select className="border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white"
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-wrap items-stretch md:items-center gap-2 md:gap-3">
+          <span className="text-sm font-medium text-emerald-800 w-full md:w-auto">{bulkSelected.size} مسافر محدد</span>
+          <select className="border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white w-full md:w-auto"
             value={bulkStatus} onChange={e => setBulkStatus(e.target.value as VisaStatus)}>
             <option value="approved">موافق عليه</option>
             <option value="pending">في الانتظار</option>
             <option value="rejected">مرفوض</option>
           </select>
-          <input className="border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white flex-1 min-w-[150px]"
+          <input className="border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white w-full md:flex-1 min-w-0 md:min-w-[150px]"
             placeholder="ملاحظات (اختياري)" value={bulkNotes}
             onChange={e => setBulkNotes(e.target.value)} />
           <button onClick={() => bulkUpdate.mutate()} disabled={bulkUpdate.isPending}
-            className="bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50">
+            className="bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50 w-full md:w-auto">
             {bulkUpdate.isPending ? 'جارٍ...' : 'تطبيق'}
           </button>
           <button onClick={() => setBulkSelected(new Set())}
-            className="text-sm text-gray-500 hover:text-gray-700">إلغاء</button>
+            className="text-sm text-gray-500 hover:text-gray-700 w-full md:w-auto text-center">إلغاء</button>
         </div>
       )}
 
@@ -206,14 +206,15 @@ export default function VisaTrackingPage() {
         />
       </div>
 
-      {/* Table */}
+      {/* Table / Mobile Cards */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-10 text-center text-gray-400">جارٍ التحميل...</div>
         ) : filteredTravellers.length === 0 ? (
           <div className="p-10 text-center text-gray-400">لا يوجد مسافرون</div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+          <table className="hidden md:table w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-3 w-8">
@@ -282,13 +283,59 @@ export default function VisaTrackingPage() {
               })}
             </tbody>
           </table>
+          <div className="md:hidden p-3 space-y-3">
+            {filteredTravellers.map(t => {
+              const cfg = STATUS_CFG[t.visa_status]
+              return (
+                <div key={t.id} className="border border-gray-100 rounded-xl p-3 bg-white shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <button className="text-right hover:text-emerald-700" onClick={() => navigate(`/travellers/${t.id}`)}>
+                      <p className="font-medium text-gray-800">{t.full_name_ar}</p>
+                    </button>
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                      {cfg.icon} {cfg.label}
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-1.5 text-sm text-gray-600">
+                    <p><span className="text-gray-500">رقم البطاقة: </span><span className="font-mono">{t.cpr_number}</span></p>
+                    <p><span className="text-gray-500">الجنس: </span>{t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}</p>
+                    <p>
+                      <span className="text-gray-500">مصدر التصريح: </span>
+                      {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
+                        ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
+                        : '—'}
+                    </p>
+                  </div>
+                  <div className="mt-3">
+                    <label className="block text-xs text-gray-500 mb-1">تغيير الحالة</label>
+                    <select
+                      className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                      value={t.visa_status}
+                      onChange={e => updateVisa.mutate({ id: t.id, status: e.target.value as VisaStatus })}>
+                      <option value="pending">في الانتظار</option>
+                      <option value="approved">موافق عليه</option>
+                      <option value="rejected">مرفوض</option>
+                    </select>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                    <button onClick={() => setHistoryModal(t.id)}
+                      className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                      title="عرض السجل">
+                      <History size={14} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          </>
         )}
       </div>
 
       {/* History modal */}
       {historyModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[80vh] overflow-y-auto" dir="rtl">
+        <div className="fixed inset-0 bg-black/40 flex items-stretch md:items-center justify-center md:p-4 z-50">
+          <div className="bg-white w-full h-full rounded-none p-6 space-y-4 overflow-y-auto md:h-auto md:max-w-md md:rounded-2xl md:shadow-2xl md:max-h-[80vh]" dir="rtl">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-800">
                 سجل التصريح — {historyTraveller?.full_name_ar}
