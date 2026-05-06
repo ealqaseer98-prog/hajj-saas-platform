@@ -18,6 +18,8 @@ export interface Traveller {
   cpr_number:      string
   full_name_ar:    string
   full_name_en:    string
+  group_name:      string | null
+  tasreeh_source:  string | null
   package_type:    PackageType | null
   gender:          Gender | null
   phone:           string | null

@@ -22,7 +22,7 @@ const PACKAGE_LABELS: Record<PackageType, string> = {
 const EMPTY: Partial<Traveller> = {
   cpr_number: '', full_name_ar: '', full_name_en: '',
   phone: '', email: '', passport_number: '',
-  nationality: 'بحريني', visa_status: 'pending', package_type: null, gender: null, notes: '',
+  nationality: 'بحريني', visa_status: 'pending', package_type: null, group_name: null, tasreeh_source: null, gender: null, notes: '',
 }
 
 export default function TravellersPage() {
@@ -243,6 +243,21 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
           </Field>
           <Field label="الجنسية">
             <input className={ic} value={data.nationality ?? ''} onChange={f('nationality')} />
+          </Field>
+          <Field label="اسم المجموعة">
+            <select className={ic} value={data.group_name ?? ''} onChange={f('group_name')}>
+              <option value="">— اختر —</option>
+              <option value="alammar">العمار</option>
+              <option value="sarhan">السرحان</option>
+              <option value="other">أخرى</option>
+            </select>
+          </Field>
+          <Field label="مصدر التصريح">
+            <select className={ic} value={data.tasreeh_source ?? ''} onChange={f('tasreeh_source')}>
+              <option value="">— اختر —</option>
+              <option value="bahrain">البحرين</option>
+              <option value="saudi">السعودية</option>
+            </select>
           </Field>
           <Field label="حالة التصريح">
             <select className={ic} value={data.visa_status ?? 'pending'} onChange={f('visa_status')}>
