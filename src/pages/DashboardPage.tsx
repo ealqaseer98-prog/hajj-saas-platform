@@ -25,7 +25,7 @@ export default function DashboardPage() {
         { count: visaApproved },
         { count: visaRejected },
       ] = await Promise.all([
-        supabase.from('travellers').select('id, gender, tasreeh_source'),
+        supabase.from('travellers').select('id, gender, tasreeh_source, visa_status'),
         supabase.from('trips').select('*', { count: 'exact', head: true }).eq('status', 'upcoming'),
         supabase.from('invoices').select('amount, amount_paid').neq('status', 'cancelled'),
         supabase.from('accounts').select('balance'),
