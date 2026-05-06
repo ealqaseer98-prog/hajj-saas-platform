@@ -9,8 +9,8 @@ import { useAuthStore } from '../store/authStore'
 export default function DashboardPage() {
   const { user }  = useAuthStore()
   const navigate  = useNavigate()
-  const [genderSourceFilter, setGenderSourceFilter] = useState<'all' | 'bahrain' | 'saudi'>('all')
-  const [visaSourceFilter, setVisaSourceFilter] = useState<'all' | 'bahrain' | 'saudi'>('all')
+  const [genderFilter, setGenderFilter] = useState<'all' | 'bahrain' | 'saudi'>('all')
+  const [permitFilter, setPermitFilter] = useState<'all' | 'bahrain' | 'saudi'>('all')
 
   // ── Main stats ──────────────────────────────────────────────────────────────
   const { data: stats } = useQuery({
@@ -148,7 +148,7 @@ export default function DashboardPage() {
   const alertCount = (stats?.visaPending ?? 0) + overdueInvoices.length + expiringPassports.length
 
   const genderFilteredTravellers = (stats?.travellerData ?? []).filter((t: any) =>
-    genderSourceFilter === 'all' ? true : t.tasreeh_source === genderSourceFilter
+    genderFilter === 'all' ? true : t.tasreeh_source === genderFilter
   )
   const genderTotal = genderFilteredTravellers.length
   const genderMales = genderFilteredTravellers.filter((t: any) => t.gender === 'male').length
@@ -157,7 +157,7 @@ export default function DashboardPage() {
   const malePercent = genderTotal ? Math.round((genderMales / genderTotal) * 100) : 0
   const femalePercent = genderTotal ? Math.round((genderFemales / genderTotal) * 100) : 0
   const visaFilteredTravellers = (stats?.travellerData ?? []).filter((t: any) =>
-    visaSourceFilter === 'all' ? true : t.tasreeh_source === visaSourceFilter
+    permitFilter === 'all' ? true : t.tasreeh_source === permitFilter
   )
   const visaFilteredTotal = visaFilteredTravellers.length
 
@@ -237,14 +237,14 @@ export default function DashboardPage() {
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
               {([
                 ['all', 'الكل'],
-                ['bahrain', 'تصاريح البحرين'],
-                ['saudi', 'تصاريح السعودية'],
+                ['bahrain', 'البحرين'],
+                ['saudi', 'السعودية'],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
-                  onClick={() => setGenderSourceFilter(value)}
+                  onClick={() => setGenderFilter(value)}
                   className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-                    genderSourceFilter === value ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
+                    genderFilter === value ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {label}
@@ -304,14 +304,14 @@ export default function DashboardPage() {
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
               {([
                 ['all', 'الكل'],
-                ['bahrain', 'تصاريح البحرين'],
-                ['saudi', 'تصاريح السعودية'],
+                ['bahrain', 'البحرين'],
+                ['saudi', 'السعودية'],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
-                  onClick={() => setVisaSourceFilter(value)}
+                  onClick={() => setPermitFilter(value)}
                   className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-                    visaSourceFilter === value ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
+                    permitFilter === value ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {label}
