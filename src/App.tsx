@@ -19,7 +19,7 @@ import DocumentsPage       from './pages/DocumentsPage'
 import RemindersPage       from './pages/RemindersPage'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 1000 * 60 * 2 } }
+  defaultOptions: { queries: { staleTime: 0, refetchOnWindowFocus: true } }
 })
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
