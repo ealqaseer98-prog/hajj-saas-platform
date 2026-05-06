@@ -2,7 +2,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
-import bcrypt from 'bcryptjs'
 import type { AppUser } from '../types'
 
 interface AuthState {
@@ -32,8 +31,7 @@ export const useAuthStore = create<AuthState>()(
             return { error: 'اسم المستخدم غير موجود' }
           }
 
-          const valid = await bcrypt.compare(password, data.password)
-          if (!valid) {
+          if (data.password !== password) {
             set({ loading: false })
             return { error: 'كلمة المرور غير صحيحة' }
           }
