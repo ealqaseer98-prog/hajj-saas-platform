@@ -41,6 +41,14 @@ const navSections = [
   },
 ]
 
+const mobileNavItems = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'لوحة التحكم' },
+  { to: '/travellers', icon: Users, label: 'المسافرون' },
+  { to: '/trips', icon: Plane, label: 'الرحلات' },
+  { to: '/accounting', icon: BookOpen, label: 'المحاسبة' },
+  { to: '/hotels', icon: Building2, label: 'الفنادق' },
+]
+
 export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
@@ -53,7 +61,7 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-gray-50" dir="rtl">
       {/* Sidebar */}
-      <aside className="w-62 bg-emerald-900 text-white flex flex-col shrink-0" style={{ width: '248px' }}>
+      <aside className="hidden md:flex w-62 bg-emerald-900 text-white flex-col shrink-0" style={{ width: '248px' }}>
         {/* Header */}
         <div className="p-4 border-b border-emerald-800">
           <div className="flex items-center gap-3">
@@ -108,9 +116,30 @@ export default function Layout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
         <Outlet />
       </main>
+
+      {/* Mobile bottom navigation */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)] z-40">
+        <div className="grid grid-cols-5">
+          {mobileNavItems.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                clsx(
+                  'flex flex-col items-center justify-center gap-1 py-2 text-[11px] transition-colors',
+                  isActive ? 'text-emerald-700 font-semibold' : 'text-gray-500'
+                )
+              }
+            >
+              <Icon size={18} />
+              <span className="leading-none">{label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </nav>
     </div>
   )
 }
