@@ -4,13 +4,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, Clock, XCircle, ChevronDown, History, Filter } from 'lucide-react'
-import type { Traveller, VisaStatus } from '../types'
+import type { Traveller, VisaStatus, PackageType } from '../types'
 import { useAuthStore } from '../store/authStore'
 
 const STATUS_CFG: Record<VisaStatus, { label: string; icon: React.ReactNode; bg: string; text: string; border: string }> = {
   pending:  { label: 'في الانتظار', icon: <Clock size={14} />,       bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
   approved: { label: 'موافق عليه',  icon: <CheckCircle2 size={14} />, bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
   rejected: { label: 'مرفوض',       icon: <XCircle size={14} />,      bg: 'bg-red-50',    text: 'text-red-700',    border: 'border-red-200'   },
+}
+
+const PACKAGE_LABELS: Record<PackageType, string> = {
+  barr: 'البر',
+  tayaran_dammam: 'طيران - الدمام',
+  tayaran_bahrain: 'طيران - البحرين',
+  tasreeh_only: 'فقط تصريح',
 }
 
 export default function VisaTrackingPage() {
@@ -23,18 +30,23 @@ export default function VisaTrackingPage() {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
   const [bulkStatus, setBulkStatus]     = useState<VisaStatus>('approved')
   const [bulkNotes, setBulkNotes]       = useState('')
+  const [search, setSearch]             = useState('')
 
   const { data: travellers = [], isLoading } = useQuery({
     queryKey: ['visa-travellers', filterStatus],
     queryFn: async () => {
       let q = supabase.from('travellers')
-        .select('id, full_name_ar, full_name_en, cpr_number, passport_number, passport_expiry, visa_status, gender, phone')
+        .select('id, full_name_ar, full_name_en, cpr_number, passport_number, visa_status, gender, phone, package_type')
         .order('full_name_ar')
       if (filterStatus !== 'all') q = q.eq('visa_status', filterStatus)
       const { data } = await q
       return (data ?? []) as Traveller[]
     },
   })
+
+  const filteredTravellers = travellers.filter(t =>
+    t.full_name_ar.toLowerCase().includes(search.trim().toLowerCase())
+  )
 
   const { data: history = [] } = useQuery({
     queryKey: ['visa-history', historyModal],
@@ -159,11 +171,21 @@ export default function VisaTrackingPage() {
         ))}
       </div>
 
+      <div>
+        <input
+          type="text"
+          placeholder="ابحث بالاسم العربي..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full md:w-80 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-10 text-center text-gray-400">جارٍ التحميل...</div>
-        ) : travellers.length === 0 ? (
+        ) : filteredTravellers.length === 0 ? (
           <div className="p-10 text-center text-gray-400">لا يوجد مسافرون</div>
         ) : (
           <table className="w-full text-sm">
@@ -171,22 +193,21 @@ export default function VisaTrackingPage() {
               <tr>
                 <th className="px-4 py-3 w-8">
                   <input type="checkbox" className="rounded"
-                    checked={bulkSelected.size === travellers.length && travellers.length > 0}
-                    onChange={e => setBulkSelected(e.target.checked ? new Set(travellers.map(t => t.id)) : new Set())} />
+                    checked={bulkSelected.size === filteredTravellers.length && filteredTravellers.length > 0}
+                    onChange={e => setBulkSelected(e.target.checked ? new Set(filteredTravellers.map(t => t.id)) : new Set())} />
                 </th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">المسافر</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">رقم البطاقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">جواز السفر</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">انتهاء الجواز</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">الباقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الحالة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">تغيير الحالة</th>
                 <th className="px-4 py-3 font-medium text-gray-600">السجل</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {travellers.map(t => {
+              {filteredTravellers.map(t => {
                 const cfg = STATUS_CFG[t.visa_status]
-                const isExpiringSoon = t.passport_expiry && new Date(t.passport_expiry) <= new Date(Date.now() + 180 * 86400000)
                 return (
                   <tr key={t.id} className={`hover:bg-gray-50 transition-colors ${bulkSelected.has(t.id) ? 'bg-emerald-50' : ''}`}>
                     <td className="px-4 py-3">
@@ -204,14 +225,7 @@ export default function VisaTrackingPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-gray-600">{t.cpr_number}</td>
                     <td className="px-4 py-3 font-mono text-gray-600">{t.passport_number ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      {t.passport_expiry
-                        ? <span className={isExpiringSoon ? 'text-red-600 font-medium' : 'text-gray-600'}>
-                            {t.passport_expiry}
-                            {isExpiringSoon && <span className="text-xs mr-1 text-red-500">⚠️</span>}
-                          </span>
-                        : <span className="text-gray-300">—</span>}
-                    </td>
+                    <td className="px-4 py-3 text-gray-600">{t.package_type ? PACKAGE_LABELS[t.package_type] : '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
                         {cfg.icon} {cfg.label}
