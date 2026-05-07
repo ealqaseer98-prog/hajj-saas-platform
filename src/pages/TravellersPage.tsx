@@ -22,6 +22,7 @@ const PACKAGE_LABELS: Record<PackageType, string> = {
 const TASREEH_SOURCE_LABELS: Record<'bahrain' | 'saudi', string> = {
   bahrain: 'البحرين',
   saudi: 'السعودية',
+  other: 'أخرى',
 }
 
 const GROUP_NAME_LABELS: Record<'alammar' | 'sarhan' | 'other', string> = {
@@ -489,7 +490,7 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
             <select className={ic} value={data.tasreeh_source ?? ''} onChange={f('tasreeh_source')}>
               <option value="">— اختر —</option>
               <option value="bahrain">البحرين</option>
-              <option value="saudi">السعودية</option>
+              <option value="saudi">السعودية</option><option value="other">أخرى</option>
             </select>
           </Field>
           <Field label="حالة التصريح">

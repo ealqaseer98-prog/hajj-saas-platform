@@ -23,6 +23,7 @@ const PACKAGE_LABELS: Record<PackageType, string> = {
 const TASREEH_SOURCE_LABELS: Record<'bahrain' | 'saudi', string> = {
   bahrain: 'البحرين',
   saudi: 'السعودية',
+  other: 'أخرى',
 }
 
 export default function VisaTrackingPage() {
