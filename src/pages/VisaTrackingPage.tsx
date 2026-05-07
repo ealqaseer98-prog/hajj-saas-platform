@@ -143,7 +143,7 @@ export default function VisaTrackingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">تتبع التصاريح</h1>
-          <p className="text-sm text-gray-500 mt-0.5">إدارة ومتابعة حالات التصريح لجميع المسافرين</p>
+          <p className="text-sm text-gray-500 mt-0.5">إدارة ومتابعة حالات التصريح لجميع الحجاج</p>
         </div>
       </div>
 
@@ -167,7 +167,7 @@ export default function VisaTrackingPage() {
       {/* Bulk action bar */}
       {bulkSelected.size > 0 && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-wrap items-stretch md:items-center gap-2 md:gap-3">
-          <span className="text-sm font-medium text-emerald-800 w-full md:w-auto">{bulkSelected.size} مسافر محدد</span>
+          <span className="text-sm font-medium text-emerald-800 w-full md:w-auto">{bulkSelected.size} حاج محدد</span>
           <select className="border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white w-full md:w-auto"
             value={bulkStatus} onChange={e => setBulkStatus(e.target.value as VisaStatus)}>
             <option value="approved">موافق عليه</option>
@@ -211,7 +211,7 @@ export default function VisaTrackingPage() {
         {isLoading ? (
           <div className="p-10 text-center text-gray-400">جارٍ التحميل...</div>
         ) : filteredTravellers.length === 0 ? (
-          <div className="p-10 text-center text-gray-400">لا يوجد مسافرون</div>
+          <div className="p-10 text-center text-gray-400">لا يوجد حاجون</div>
         ) : (
           <>
           <table className="hidden md:table w-full text-sm">
@@ -222,7 +222,7 @@ export default function VisaTrackingPage() {
                     checked={bulkSelected.size === filteredTravellers.length && filteredTravellers.length > 0}
                     onChange={e => setBulkSelected(e.target.checked ? new Set(filteredTravellers.map(t => t.id)) : new Set())} />
                 </th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">المسافر</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">الحاج</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">رقم البطاقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">مصدر التصريح</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الباقة</th>

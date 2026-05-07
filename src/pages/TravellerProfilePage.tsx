@@ -100,7 +100,7 @@ export default function TravellerProfilePage() {
     <div className="p-6 space-y-5 max-w-4xl mx-auto" dir="rtl">
       <button onClick={() => navigate('/travellers')}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 transition-colors">
-        <ArrowRight size={16} /> العودة إلى المسافرين
+        <ArrowRight size={16} /> العودة إلى الحجاج
       </button>
 
       {/* Profile header */}

@@ -119,7 +119,7 @@ export default function RoomsPage() {
           {unassigned.length > 0 && (
             <div className="flex items-center gap-1 text-amber-600 text-xs bg-amber-50 px-2 py-1 rounded-lg">
               <AlertTriangle size={12} />
-              {unassigned.length} مسافر بدون غرفة
+              {unassigned.length} حاج بدون غرفة
             </div>
           )}
           <button onClick={() => setAddRoomModal(true)}
@@ -133,7 +133,7 @@ export default function RoomsPage() {
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: 'عدد الغرف', value: rooms.length },
-          { label: 'المسافرون المعيّنون', value: assignedIds.length },
+          { label: 'الحجاج المعيّنون', value: assignedIds.length },
           { label: 'الإشغال', value: rooms.length ? `${Math.round((assignedIds.length / rooms.reduce((s: number, r: any) => s + r.capacity, 0)) * 100)}%` : '—' },
         ].map(c => (
           <div key={c.label} className="bg-white rounded-xl border border-gray-100 p-3 text-center">
@@ -180,7 +180,7 @@ export default function RoomsPage() {
                     </button>
                   </div>
                 ))}
-                {isEmpty && <p className="text-xs text-gray-300 italic">لا يوجد مسافرون</p>}
+                {isEmpty && <p className="text-xs text-gray-300 italic">لا يوجد حاجون</p>}
               </div>
 
               {/* Capacity bar */}
@@ -193,7 +193,7 @@ export default function RoomsPage() {
                 {!isFull && (
                   <button onClick={() => { setAssignModal(room.id); setSelectedTraveller('') }}
                     className="flex items-center gap-1 text-xs text-emerald-700 hover:bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200 transition-colors flex-1 justify-center">
-                    <UserPlus size={12} /> إضافة مسافر
+                    <UserPlus size={12} /> إضافة حاج
                   </button>
                 )}
                 <button onClick={() => window.confirm('حذف الغرفة؟') && deleteRoom.mutate(room.id)}
@@ -253,11 +253,11 @@ export default function RoomsPage() {
       {assignModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3" dir="rtl">
-            <h2 className="text-lg font-bold">إضافة مسافر للغرفة</h2>
+            <h2 className="text-lg font-bold">إضافة حاج للغرفة</h2>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">اختر المسافر</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">اختر الحاج</label>
               <select className={ic} value={selectedTraveller} onChange={e => setSelectedTraveller(e.target.value)}>
-                <option value="">— اختر مسافرًا —</option>
+                <option value="">— اختر حاجًا —</option>
                 {travellers.filter(t => !assignedIds.includes(t.id)).map(t => (
                   <option key={t.id} value={t.id}>{t.full_name_ar}</option>
                 ))}
@@ -265,7 +265,7 @@ export default function RoomsPage() {
             </div>
             {unassigned.length === 0 && (
               <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2">
-                جميع المسافرين المرتبطين بهذه الرحلة قد تم تعيينهم لغرف
+                جميع الحجاج المرتبطين بهذه الرحلة قد تم تعيينهم لغرف
               </p>
             )}
             <div className="flex gap-3 pt-2">

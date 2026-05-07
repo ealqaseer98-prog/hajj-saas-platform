@@ -171,11 +171,11 @@ export default function TripDetailPage() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <Users size={15} /> المسافرون ({enrolled.length})
+            <Users size={15} /> الحجاج ({enrolled.length})
           </h2>
           <button onClick={() => setShowAddTraveller(!showAddTraveller)}
             className="flex items-center gap-1 text-xs bg-emerald-700 text-white px-3 py-1.5 rounded-lg">
-            <UserPlus size={12} /> إضافة مسافر
+            <UserPlus size={12} /> إضافة حاج
           </button>
         </div>
 
@@ -183,7 +183,7 @@ export default function TripDetailPage() {
           <div className="mb-4 p-3 bg-gray-50 rounded-xl space-y-2">
             <input
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="ابحث عن مسافر..."
+              placeholder="ابحث عن حاج..."
               value={travellerSearch}
               onChange={e => setSearch(e.target.value)}
             />
@@ -214,7 +214,7 @@ export default function TripDetailPage() {
               </button>
             </div>
           ))}
-          {enrolled.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">لم يتم تسجيل مسافرين في هذه الرحلة</p>}
+          {enrolled.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">لم يتم تسجيل حاجين في هذه الرحلة</p>}
         </div>
       </div>
 

@@ -17,9 +17,9 @@ const navSections = [
     ],
   },
   {
-    label: 'المسافرون',
+    label: 'الحجاج',
     items: [
-      { to: '/travellers',    icon: Users,        label: 'المسافرون'       },
+      { to: '/travellers',    icon: Users,        label: 'الحجاج'       },
       { to: '/visa-tracking', icon: ShieldCheck,  label: 'تتبع التصاريح' },
       { to: '/documents',     icon: FileStack,    label: 'المستندات'       },
     ],
@@ -44,7 +44,7 @@ const navSections = [
 
 const mobilePrimaryItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'لوحة التحكم' },
-  { to: '/travellers', icon: Users, label: 'المسافرون' },
+  { to: '/travellers', icon: Users, label: 'الحجاج' },
   { to: '/trips', icon: Plane, label: 'الرحلات' },
   { to: '/accounting', icon: BookOpen, label: 'المحاسبة' },
 ]

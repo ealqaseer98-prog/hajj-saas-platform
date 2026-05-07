@@ -181,12 +181,12 @@ export default function DashboardPage() {
       <div className="space-y-2">
         {(stats?.visaPending ?? 0) > 0 && (
           <AlertBanner color="amber" icon={<Clock size={16} />}
-            message={`${stats?.visaPending} مسافر بتصريح في الانتظار`}
-            action="عرض المسافرين" onAction={() => navigate('/travellers')} />
+            message={`${stats?.visaPending} حاج بتصريح في الانتظار`}
+            action="عرض الحجاج" onAction={() => navigate('/travellers')} />
         )}
         {(stats?.visaRejected ?? 0) > 0 && (
           <AlertBanner color="red" icon={<AlertCircle size={16} />}
-            message={`${stats?.visaRejected} مسافر رُفض تصريحه`}
+            message={`${stats?.visaRejected} حاج رُفض تصريحه`}
             action="عرض" onAction={() => navigate('/travellers')} />
         )}
         {overdueInvoices.length > 0 && (
@@ -209,7 +209,7 @@ export default function DashboardPage() {
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: 'إجمالي المسافرين', value: stats?.total ?? 0,         icon: Users,        color: 'text-teal-600',    bg: 'bg-teal-50',    link: '/travellers' },
+          { label: 'إجمالي الحجاج', value: stats?.total ?? 0,         icon: Users,        color: 'text-teal-600',    bg: 'bg-teal-50',    link: '/travellers' },
           { label: 'تصاريح البحرين',   value: stats?.bahrainTasreeh ?? 0, icon: CheckCircle2, color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/travellers' },
           { label: 'تصاريح السعودية',  value: stats?.saudiTasreeh ?? 0,   icon: CheckCircle2, color: 'text-green-600',   bg: 'bg-green-50',   link: '/travellers' },
           { label: 'رحلات قادمة',       value: stats?.upcomingTrips ?? 0, icon: Plane,         color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/trips' },
@@ -233,7 +233,7 @@ export default function DashboardPage() {
         {/* Gender breakdown */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4 gap-2">
-            <h2 className="text-sm font-semibold text-gray-700">توزيع المسافرين حسب الجنس</h2>
+            <h2 className="text-sm font-semibold text-gray-700">توزيع الحجاج حسب الجنس</h2>
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
               {([
                 ['all', 'الكل'],
@@ -284,7 +284,7 @@ export default function DashboardPage() {
               </div>
             </div>
             {genderNoGender > 0 && (
-              <p className="text-xs text-gray-400">{genderNoGender} مسافر بدون تحديد جنس</p>
+              <p className="text-xs text-gray-400">{genderNoGender} حاج بدون تحديد جنس</p>
             )}
             {/* Stacked visual */}
             {genderTotal > 0 && (
@@ -376,7 +376,7 @@ export default function DashboardPage() {
         {/* Recent travellers */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700">آخر المسافرين</h2>
+            <h2 className="text-sm font-semibold text-gray-700">آخر الحجاج</h2>
             <button onClick={() => navigate('/travellers')} className="text-xs text-emerald-600 hover:underline">الكل</button>
           </div>
           <div className="space-y-1.5">

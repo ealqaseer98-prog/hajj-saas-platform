@@ -213,7 +213,7 @@ export default function RemindersPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">المسافر</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600">الحاج</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">الفاتورة</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">التاريخ</th>
                     <th className="text-right px-4 py-3 font-medium text-gray-600">الطريقة</th>
@@ -292,10 +292,10 @@ export default function RemindersPage() {
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3" dir="rtl">
                 <h2 className="text-lg font-bold">تذكير جديد</h2>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">المسافر *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">الحاج *</label>
                   <select className={ic} value={newReminder.traveller_id}
                     onChange={e => setNewReminder(r => ({ ...r, traveller_id: e.target.value }))}>
-                    <option value="">— اختر مسافرًا —</option>
+                    <option value="">— اختر حاجًا —</option>
                     {travellers.map(t => <option key={t.id} value={t.id}>{t.full_name_ar}</option>)}
                   </select>
                 </div>
@@ -352,7 +352,7 @@ export default function RemindersPage() {
             </h2>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">اختر مسافرًا</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">اختر حاجًا</label>
               <select className={ic}
                 value={selectedTraveller?.id ?? ''}
                 onChange={e => {
@@ -360,7 +360,7 @@ export default function RemindersPage() {
                   setSelectedTraveller(t)
                   setMessageText('')
                 }}>
-                <option value="">— اختر مسافرًا —</option>
+                <option value="">— اختر حاجًا —</option>
                 {travellers.map(t => <option key={t.id} value={t.id}>{t.full_name_ar} {t.phone ? `(${t.phone})` : ''}</option>)}
               </select>
             </div>

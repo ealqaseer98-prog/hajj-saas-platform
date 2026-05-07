@@ -189,7 +189,7 @@ export default function TravellersPage() {
       <html lang="ar" dir="rtl">
       <head>
         <meta charset="utf-8" />
-        <title>قائمة المسافرين</title>
+        <title>قائمة الحجاج</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
@@ -215,7 +215,7 @@ export default function TravellersPage() {
       </head>
       <body>
         <div class="print-wrap">
-          <h1 class="title">قائمة المسافرين - حملة العمار للحج والعمرة</h1>
+          <h1 class="title">قائمة الحجاج - حملة العمار للحج والعمرة</h1>
           <p class="date">التاريخ: ${escapeHtml(today)}</p>
           <table>
             <thead><tr>${tableHead}</tr></thead>
@@ -241,7 +241,7 @@ export default function TravellersPage() {
     <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-5" dir="rtl">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">المسافرون</h1>
+          <h1 className="text-2xl font-bold text-gray-800">الحجاج</h1>
           <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
             <span>الإجمالي: {travellers.length}</span>
             <span className="text-blue-600 font-medium">👨 رجال: {maleCount}</span>
@@ -265,7 +265,7 @@ export default function TravellersPage() {
             onClick={() => { setSelected(EMPTY); setModal('add') }}
             className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            <Plus size={16} /> إضافة مسافر
+            <Plus size={16} /> إضافة حاج
           </button>
 
           {showColumnPicker && (
@@ -315,7 +315,7 @@ export default function TravellersPage() {
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-gray-400">
             <UserCheck size={40} className="mx-auto mb-3 opacity-30" />
-            لا يوجد مسافرون
+            لا يوجد حاجون
           </div>
         ) : (
           <>
@@ -439,7 +439,7 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" dir="rtl">
         <h2 className="text-lg font-bold text-gray-800">
-          {mode === 'add' ? '➕ إضافة مسافر جديد' : '✏️ تعديل بيانات المسافر'}
+          {mode === 'add' ? '➕ إضافة حاج جديد' : '✏️ تعديل بيانات الحاج'}
         </h2>
 
         <div className="grid grid-cols-2 gap-3">

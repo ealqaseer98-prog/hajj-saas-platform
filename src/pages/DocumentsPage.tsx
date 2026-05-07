@@ -71,7 +71,7 @@ export default function DocumentsPage() {
   // Upload mutation
   const upload = useMutation({
     mutationFn: async () => {
-      if (!form.file || !form.traveller_id) throw new Error('يرجى اختيار ملف ومسافر')
+      if (!form.file || !form.traveller_id) throw new Error('يرجى اختيار ملف وحاج')
       setUploading(true)
       try {
         const ext       = form.file.name.split('.').pop()
@@ -131,7 +131,7 @@ export default function DocumentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">المستندات والوثائق</h1>
-          <p className="text-sm text-gray-500 mt-0.5">رفع وإدارة مستندات المسافرين</p>
+          <p className="text-sm text-gray-500 mt-0.5">رفع وإدارة مستندات الحجاج</p>
         </div>
         <button onClick={() => setUploadModal(true)}
           className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium">
@@ -144,7 +144,7 @@ export default function DocumentsPage() {
         <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder="ابحث باسم المسافر أو رقم البطاقة..."
+            placeholder="ابحث باسم الحاج أو رقم البطاقة..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
@@ -247,10 +247,10 @@ export default function DocumentsPage() {
             <h2 className="text-lg font-bold text-gray-800">رفع مستند جديد</h2>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">المسافر *</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">الحاج *</label>
               <select className={ic} value={form.traveller_id}
                 onChange={e => setForm(f => ({ ...f, traveller_id: e.target.value }))}>
-                <option value="">— اختر مسافرًا —</option>
+                <option value="">— اختر حاجًا —</option>
                 {travellers.map(t => (
                   <option key={t.id} value={t.id}>{t.full_name_ar} ({t.cpr_number})</option>
                 ))}

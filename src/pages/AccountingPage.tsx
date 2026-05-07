@@ -93,7 +93,7 @@ function InvoicesTab() {
       </div>
 
       <AccountingTable
-        columns={['رقم الفاتورة', 'المسافر', 'الرحلة', 'الحساب', 'المبلغ', 'المدفوع', 'الحالة']}
+        columns={['رقم الفاتورة', 'الحاج', 'الرحلة', 'الحساب', 'المبلغ', 'المدفوع', 'الحالة']}
         rows={invoices.map((i: any) => [
           i.invoice_number ?? '—',
           i.traveller?.full_name_ar ?? '—',
@@ -108,7 +108,7 @@ function InvoicesTab() {
 
       {modal && (
         <Modal title="فاتورة جديدة" onClose={() => setModal(false)} onSave={() => save.mutate(sel)} saving={save.isPending}>
-          <Select label="المسافر" value={sel.traveller_id ?? ''}
+          <Select label="الحاج" value={sel.traveller_id ?? ''}
             onChange={v => setSel(s => ({ ...s, traveller_id: v }))}
             options={travellers.map((t: Traveller) => ({ value: t.id, label: t.full_name_ar }))} />
           <Select label="الرحلة" value={sel.trip_id ?? ''}
@@ -191,7 +191,7 @@ function ReceiptsTab() {
       </div>
 
       <AccountingTable
-        columns={['رقم الإيصال', 'المسافر', 'الفاتورة', 'الحساب', 'المبلغ', 'طريقة الدفع', 'التاريخ']}
+        columns={['رقم الإيصال', 'الحاج', 'الفاتورة', 'الحساب', 'المبلغ', 'طريقة الدفع', 'التاريخ']}
         rows={receipts.map((r: any) => [
           r.receipt_number ?? '—',
           r.traveller?.full_name_ar ?? '—',
@@ -206,7 +206,7 @@ function ReceiptsTab() {
 
       {modal && (
         <Modal title="إيصال دفع جديد" onClose={() => setModal(false)} onSave={() => save.mutate(sel)} saving={save.isPending}>
-          <Select label="المسافر" value={sel.traveller_id ?? ''}
+          <Select label="الحاج" value={sel.traveller_id ?? ''}
             onChange={v => setSel(s => ({ ...s, traveller_id: v }))}
             options={travellers.map((t: Traveller) => ({ value: t.id, label: t.full_name_ar }))} />
           <Select label="الفاتورة" value={sel.invoice_id ?? ''}

@@ -59,7 +59,7 @@ export default function TripManifestPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-5">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">كشف الرحلة</h1>
-            <p className="text-sm text-gray-500 mt-0.5">طباعة قائمة المسافرين وتفاصيل الرحلة</p>
+            <p className="text-sm text-gray-500 mt-0.5">طباعة قائمة الحجاج وتفاصيل الرحلة</p>
           </div>
           <div className="flex gap-2 w-full md:w-auto">
             <button onClick={printManifest} disabled={!manifest}
@@ -96,7 +96,7 @@ export default function TripManifestPage() {
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-3xl mb-2">🕌</div>
-                <h1 className="text-2xl font-bold text-gray-900">كشف مسافري رحلة الحج</h1>
+                <h1 className="text-2xl font-bold text-gray-900">كشف حاجي رحلة الحج</h1>
                 <p className="text-gray-500 mt-1">Hajj Trip Passenger Manifest</p>
               </div>
               <div className="text-left text-sm space-y-1">
@@ -110,7 +110,7 @@ export default function TripManifestPage() {
             {/* Stats row */}
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: 'إجمالي المسافرين', value: travellers.length },
+                { label: 'إجمالي الحجاج', value: travellers.length },
                 { label: 'رجال',             value: males },
                 { label: 'نساء',             value: females },
                 { label: 'الباقة',           value: { barr: 'البر', tayaran_dammam: 'طيران - الدمام', tayaran_bahrain: 'طيران - البحرين', tasreeh_only: 'فقط تصريح' }[trip.package_type] ?? trip.package_type },
@@ -148,7 +148,7 @@ export default function TripManifestPage() {
           {/* Travellers table */}
           <div className="p-6">
             <h2 className="text-base font-bold text-gray-800 mb-3 flex items-center gap-2">
-              <Users size={16} /> قائمة المسافرين
+              <Users size={16} /> قائمة الحجاج
             </h2>
             <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse min-w-[900px]">

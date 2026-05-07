@@ -183,7 +183,7 @@ export default function TripsPage() {
                     onChange={e => setSelected(s => ({ ...s, return_date: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">الحد الأقصى للمسافرين</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">الحد الأقصى للحاجين</label>
                   <input className={ic} type="number" value={selected.max_travellers ?? 50}
                     onChange={e => setSelected(s => ({ ...s, max_travellers: +e.target.value }))} />
                 </div>
