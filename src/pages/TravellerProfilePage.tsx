@@ -121,7 +121,7 @@ export default function TravellerProfilePage() {
               {visaCfg.icon} تصريح: {visaCfg.label}
             </span>
             <span className="text-xs text-gray-500">
-              {traveller.gender === 'male' ? 'ذكر' : traveller.gender === 'female' ? 'أنثى' : '—'}
+              {traveller.gender === 'male' ? 'رجل' : traveller.gender === 'female' ? 'امرأة' : '—'}
               {traveller.nationality && ` · ${traveller.nationality}`}
             </span>
           </div>

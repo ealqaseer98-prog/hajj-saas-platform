@@ -96,8 +96,8 @@ export default function TravellersPage() {
           <h1 className="text-2xl font-bold text-gray-800">المسافرون</h1>
           <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
             <span>الإجمالي: {travellers.length}</span>
-            <span className="text-blue-600 font-medium">👨 ذكور: {maleCount}</span>
-            <span className="text-pink-600 font-medium">👩 إناث: {femaleCount}</span>
+            <span className="text-blue-600 font-medium">👨 رجال: {maleCount}</span>
+            <span className="text-pink-600 font-medium">👩 نساء: {femaleCount}</span>
           </div>
         </div>
         <button
@@ -125,7 +125,7 @@ export default function TravellersPage() {
               className={`flex-1 md:flex-none px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 genderFilter === v ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
               }`}>
-              {v === 'all' ? 'الكل' : v === 'male' ? 'ذكور' : 'إناث'}
+              {v === 'all' ? 'الكل' : v === 'male' ? 'رجال' : 'نساء'}
             </button>
           ))}
         </div>
@@ -160,8 +160,8 @@ export default function TravellersPage() {
                   <td className="px-4 py-3 font-medium text-gray-800">{t.full_name_ar}</td>
                   <td className="px-4 py-3 text-gray-600 font-mono">{t.cpr_number}</td>
                   <td className="px-4 py-3">
-                    {t.gender === 'male'   ? <span className="text-blue-600 text-xs font-medium">👨 ذكر</span>
-                   : t.gender === 'female' ? <span className="text-pink-600 text-xs font-medium">👩 أنثى</span>
+                    {t.gender === 'male'   ? <span className="text-blue-600 text-xs font-medium">👨 رجل</span>
+                   : t.gender === 'female' ? <span className="text-pink-600 text-xs font-medium">👩 امرأة</span>
                    : <span className="text-gray-300 text-xs">—</span>}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
@@ -210,7 +210,7 @@ export default function TravellersPage() {
                   <p><span className="text-gray-500">رقم البطاقة: </span><span className="font-mono">{t.cpr_number}</span></p>
                   <p>
                     <span className="text-gray-500">الجنس: </span>
-                    {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
+                    {t.gender === 'male' ? 'رجل' : t.gender === 'female' ? 'امرأة' : '—'}
                   </p>
                   <p>
                     <span className="text-gray-500">اسم المجموعة: </span>
@@ -287,8 +287,8 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
           <Field label="الجنس *" required>
             <select className={ic} value={data.gender ?? ''} onChange={f('gender')}>
               <option value="">— اختر —</option>
-              <option value="male">ذكر</option>
-              <option value="female">أنثى</option>
+              <option value="male">رجل</option>
+              <option value="female">امرأة</option>
             </select>
           </Field>
           <Field label="رقم الهاتف">

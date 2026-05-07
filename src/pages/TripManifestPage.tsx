@@ -111,8 +111,8 @@ export default function TripManifestPage() {
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: 'إجمالي المسافرين', value: travellers.length },
-                { label: 'ذكور',             value: males },
-                { label: 'إناث',             value: females },
+                { label: 'رجال',             value: males },
+                { label: 'نساء',             value: females },
                 { label: 'الباقة',           value: { barr: 'البر', tayaran_dammam: 'طيران - الدمام', tayaran_bahrain: 'طيران - البحرين', tasreeh_only: 'فقط تصريح' }[trip.package_type] ?? trip.package_type },
               ].map(s => (
                 <div key={s.label} className="bg-gray-50 print:bg-gray-100 rounded-xl p-3 text-center">
@@ -173,7 +173,7 @@ export default function TripManifestPage() {
                     <td className="py-2 px-3 font-mono text-gray-600">{t.cpr_number}</td>
                     <td className="py-2 px-3 font-mono text-gray-600">{t.passport_number ?? '—'}</td>
                     <td className="py-2 px-3">
-                      {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
+                      {t.gender === 'male' ? 'رجل' : t.gender === 'female' ? 'امرأة' : '—'}
                     </td>
                     <td className="py-2 px-3">
                       <span className={`px-1.5 py-0.5 rounded text-xs ${
