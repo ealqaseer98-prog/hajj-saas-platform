@@ -9,8 +9,8 @@ import { useAuthStore } from '../store/authStore'
 export default function DashboardPage() {
   const { user }  = useAuthStore()
   const navigate  = useNavigate()
-  const [genderFilter, setGenderFilter] = useState<'all' | 'bahrain' | 'saudi'>('all')
-  const [permitFilter, setPermitFilter] = useState<'all' | 'bahrain' | 'saudi'>('all')
+  const [genderFilter, setGenderFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
+  const [permitFilter, setPermitFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
 
   // ── Main stats ──────────────────────────────────────────────────────────────
   const { data: stats } = useQuery({
@@ -239,6 +239,7 @@ export default function DashboardPage() {
                 ['all', 'الكل'],
                 ['bahrain', 'البحرين'],
                 ['saudi', 'السعودية'],
+                ['other', 'أخرى'],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
@@ -306,6 +307,7 @@ export default function DashboardPage() {
                 ['all', 'الكل'],
                 ['bahrain', 'البحرين'],
                 ['saudi', 'السعودية'],
+                ['other', 'أخرى'],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
