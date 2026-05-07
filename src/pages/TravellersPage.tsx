@@ -5,8 +5,6 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Search, Plus, Edit2, Trash2, Eye, UserCheck, AlertCircle } from 'lucide-react'
 import type { Traveller, VisaStatus, PackageType } from '../types'
-import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
 
 const VISA_LABELS: Record<VisaStatus, { label: string; className: string }> = {
   pending:  { label: 'في الانتظار', className: 'bg-yellow-100 text-yellow-800' },
@@ -152,35 +150,91 @@ export default function TravellersPage() {
     return '—'
   }
 
-  const exportPdf = () => {
+  const printTravellers = () => {
     if (activeColumns.length === 0) {
-      window.alert('يرجى اختيار عمود واحد على الأقل للتصدير.')
+      window.alert('يرجى اختيار عمود واحد على الأقل للطباعة.')
       return
     }
 
-    const doc = new jsPDF({
-      orientation: activeColumns.length > 6 ? 'landscape' : 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    })
-    doc.setR2L(true)
-    const pageWidth = doc.internal.pageSize.getWidth()
+    const printWindow = window.open('', '_blank', 'width=1200,height=800')
+    if (!printWindow) {
+      window.alert('تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة.')
+      return
+    }
 
-    doc.setFontSize(16)
-    doc.text('قائمة المسافرين', pageWidth - 14, 14, { align: 'right' })
-    doc.setFontSize(10)
-    doc.text(`التاريخ: ${new Date().toLocaleDateString('ar-BH')}`, pageWidth - 14, 21, { align: 'right' })
+    const escapeHtml = (value: string) =>
+      value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;')
 
-    autoTable(doc, {
-      startY: 26,
-      head: [activeColumns.map(c => c.label)],
-      body: filtered.map(t => activeColumns.map(c => getColumnValue(t, c.key))),
-      styles: { halign: 'right', fontSize: 9, cellPadding: 2.5 },
-      headStyles: { halign: 'right', fillColor: [5, 150, 105] },
-      margin: { left: 8, right: 8 },
-    })
+    const tableHead = activeColumns
+      .map(c => `<th>${escapeHtml(c.label)}</th>`)
+      .join('')
 
-    doc.save(`travellers-${new Date().toISOString().slice(0, 10)}.pdf`)
+    const tableBody = filtered
+      .map(t => {
+        const cells = activeColumns
+          .map(c => `<td>${escapeHtml(getColumnValue(t, c.key))}</td>`)
+          .join('')
+        return `<tr>${cells}</tr>`
+      })
+      .join('')
+
+    const today = new Date().toLocaleDateString('ar-BH')
+    const html = `
+      <!doctype html>
+      <html lang="ar" dir="rtl">
+      <head>
+        <meta charset="utf-8" />
+        <title>قائمة المسافرين</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+        <style>
+          @page { size: A4; margin: 10mm; }
+          * { box-sizing: border-box; }
+          html, body { margin: 0; padding: 0; background: #fff; color: #111827; }
+          body { font-family: "Noto Naskh Arabic", serif; direction: rtl; }
+          .print-wrap { padding: 8px; }
+          .title { font-size: 24px; font-weight: 700; margin: 0 0 6px 0; }
+          .date { margin: 0 0 14px 0; font-size: 14px; color: #4b5563; }
+          table { width: 100%; border-collapse: collapse; font-size: 13px; }
+          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: right; vertical-align: top; }
+          th { background: #f3f4f6; font-weight: 700; }
+          tr:nth-child(even) td { background: #f9fafb; }
+          @media print {
+            html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body * { visibility: hidden; }
+            .print-wrap, .print-wrap * { visibility: visible; }
+            .print-wrap { position: absolute; inset: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-wrap">
+          <h1 class="title">قائمة المسافرين - حملة العمار للحج والعمرة</h1>
+          <p class="date">التاريخ: ${escapeHtml(today)}</p>
+          <table>
+            <thead><tr>${tableHead}</tr></thead>
+            <tbody>${tableBody}</tbody>
+          </table>
+        </div>
+        <script>
+          window.onload = function () {
+            window.print();
+            setTimeout(function () { window.close(); }, 150);
+          };
+        </script>
+      </body>
+      </html>
+    `
+
+    printWindow.document.open()
+    printWindow.document.write(html)
+    printWindow.document.close()
   }
 
   return (
@@ -202,7 +256,7 @@ export default function TravellersPage() {
             تخصيص الأعمدة
           </button>
           <button
-            onClick={exportPdf}
+            onClick={printTravellers}
             className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             تصدير PDF
