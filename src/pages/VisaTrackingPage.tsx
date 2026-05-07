@@ -243,7 +243,7 @@ export default function VisaTrackingPage() {
                     <td className="px-4 py-3">
                       <button className="text-right hover:text-emerald-700" onClick={() => navigate(`/travellers/${t.id}`)}>
                         <p className="font-medium text-gray-800 flex items-center gap-1">
-                          {t.gender === 'male' ? '👨' : t.gender === 'female' ? '👩' : '👤'}
+                          {t.gender === 'male' ? '👨' : t.gender === 'female' ? '🧕' : '👤'}
                           {t.full_name_ar}
                         </p>
                         <p className="text-xs text-gray-400">{t.full_name_en}</p>

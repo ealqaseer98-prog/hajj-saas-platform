@@ -108,7 +108,7 @@ export default function TravellerProfilePage() {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center text-3xl">
-              {traveller.gender === 'male' ? '👨' : traveller.gender === 'female' ? '👩' : '👤'}
+              {traveller.gender === 'male' ? '👨' : traveller.gender === 'female' ? '🧕' : '👤'}
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">{traveller.full_name_ar}</h1>

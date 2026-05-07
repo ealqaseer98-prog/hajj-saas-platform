@@ -272,7 +272,7 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center justify-between text-sm mb-1.5">
                 <span className="flex items-center gap-1.5 text-pink-700 font-medium">
-                  <span className="text-base">👩</span> نساء
+                  <span className="text-base">🧕</span> نساء
                 </span>
                 <span className="font-bold text-pink-700">{genderFemales}
                   <span className="text-xs font-normal text-gray-400 mr-1">({femalePercent}%)</span>
@@ -383,7 +383,7 @@ export default function DashboardPage() {
             {recentTravellers.map((t: any) => (
               <div key={t.id} className="flex items-center justify-between py-1.5 text-sm border-b border-gray-50 last:border-0">
                 <span className="text-gray-700 flex items-center gap-1">
-                  {t.gender === 'male' ? '👨' : t.gender === 'female' ? '👩' : '👤'}
+                  {t.gender === 'male' ? '👨' : t.gender === 'female' ? '🧕' : '👤'}
                   {t.full_name_ar}
                 </span>
                 <span className={`px-1.5 py-0.5 rounded-full text-xs ${

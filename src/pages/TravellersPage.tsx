@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Search, Plus, Edit2, Trash2, Eye, UserCheck, AlertCircle } from 'lucide-react'
 import type { Traveller, VisaStatus, PackageType } from '../types'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const VISA_LABELS: Record<VisaStatus, { label: string; className: string }> = {
   pending:  { label: 'في الانتظار', className: 'bg-yellow-100 text-yellow-800' },
@@ -30,6 +32,31 @@ const GROUP_NAME_LABELS: Record<'alammar' | 'sarhan' | 'other', string> = {
   other: 'أخرى',
 }
 
+type TravellerColumnKey =
+  | 'full_name_ar'
+  | 'full_name_en'
+  | 'cpr_number'
+  | 'gender'
+  | 'phone'
+  | 'passport_number'
+  | 'package_type'
+  | 'group_name'
+  | 'tasreeh_source'
+  | 'visa_status'
+
+const TRAVELLER_COLUMNS: { key: TravellerColumnKey; label: string }[] = [
+  { key: 'full_name_ar', label: 'الاسم بالعربية' },
+  { key: 'full_name_en', label: 'الاسم بالإنجليزية' },
+  { key: 'cpr_number', label: 'رقم البطاقة' },
+  { key: 'gender', label: 'الجنس' },
+  { key: 'phone', label: 'الهاتف' },
+  { key: 'passport_number', label: 'جواز السفر' },
+  { key: 'package_type', label: 'الباقة' },
+  { key: 'group_name', label: 'اسم المجموعة' },
+  { key: 'tasreeh_source', label: 'مصدر التصريح' },
+  { key: 'visa_status', label: 'حالة التصريح' },
+]
+
 const EMPTY: Partial<Traveller> = {
   cpr_number: '', full_name_ar: '', full_name_en: '',
   phone: '', email: '', passport_number: '',
@@ -43,6 +70,19 @@ export default function TravellersPage() {
   const [modal, setModal]             = useState<'add' | 'edit' | null>(null)
   const [selected, setSelected]       = useState<Partial<Traveller>>(EMPTY)
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all')
+  const [showColumnPicker, setShowColumnPicker] = useState(false)
+  const [selectedColumns, setSelectedColumns] = useState<Record<TravellerColumnKey, boolean>>({
+    full_name_ar: true,
+    full_name_en: false,
+    cpr_number: true,
+    gender: true,
+    phone: false,
+    passport_number: false,
+    package_type: true,
+    group_name: true,
+    tasreeh_source: true,
+    visa_status: true,
+  })
 
   const { data: travellers = [], isLoading } = useQuery({
     queryKey: ['travellers', search],
@@ -88,24 +128,108 @@ export default function TravellersPage() {
   })
 
   const openEdit = (t: Traveller) => { setSelected(t); setModal('edit') }
+  const activeColumns = TRAVELLER_COLUMNS.filter(c => selectedColumns[c.key])
+
+  const getColumnValue = (t: Traveller, key: TravellerColumnKey) => {
+    if (key === 'full_name_ar') return t.full_name_ar ?? '—'
+    if (key === 'full_name_en') return t.full_name_en ?? '—'
+    if (key === 'cpr_number') return t.cpr_number ?? '—'
+    if (key === 'gender') return t.gender === 'male' ? 'رجل' : t.gender === 'female' ? 'امرأة' : '—'
+    if (key === 'phone') return t.phone ?? '—'
+    if (key === 'passport_number') return t.passport_number ?? '—'
+    if (key === 'package_type') return t.package_type ? PACKAGE_LABELS[t.package_type] : '—'
+    if (key === 'group_name') {
+      return t.group_name === 'alammar' || t.group_name === 'sarhan' || t.group_name === 'other'
+        ? GROUP_NAME_LABELS[t.group_name]
+        : '—'
+    }
+    if (key === 'tasreeh_source') {
+      return t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
+        ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
+        : '—'
+    }
+    if (key === 'visa_status') return VISA_LABELS[t.visa_status].label
+    return '—'
+  }
+
+  const exportPdf = () => {
+    if (activeColumns.length === 0) {
+      window.alert('يرجى اختيار عمود واحد على الأقل للتصدير.')
+      return
+    }
+
+    const doc = new jsPDF({
+      orientation: activeColumns.length > 6 ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    })
+    doc.setR2L(true)
+    const pageWidth = doc.internal.pageSize.getWidth()
+
+    doc.setFontSize(16)
+    doc.text('قائمة المسافرين', pageWidth - 14, 14, { align: 'right' })
+    doc.setFontSize(10)
+    doc.text(`التاريخ: ${new Date().toLocaleDateString('ar-BH')}`, pageWidth - 14, 21, { align: 'right' })
+
+    autoTable(doc, {
+      startY: 26,
+      head: [activeColumns.map(c => c.label)],
+      body: filtered.map(t => activeColumns.map(c => getColumnValue(t, c.key))),
+      styles: { halign: 'right', fontSize: 9, cellPadding: 2.5 },
+      headStyles: { halign: 'right', fillColor: [5, 150, 105] },
+      margin: { left: 8, right: 8 },
+    })
+
+    doc.save(`travellers-${new Date().toISOString().slice(0, 10)}.pdf`)
+  }
 
   return (
     <div className="p-4 md:p-6 pb-20 md:pb-6 space-y-5" dir="rtl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">المسافرون</h1>
           <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
             <span>الإجمالي: {travellers.length}</span>
             <span className="text-blue-600 font-medium">👨 رجال: {maleCount}</span>
-            <span className="text-pink-600 font-medium">👩 نساء: {femaleCount}</span>
+            <span className="text-pink-600 font-medium">🧕 نساء: {femaleCount}</span>
           </div>
         </div>
-        <button
-          onClick={() => { setSelected(EMPTY); setModal('add') }}
-          className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          <Plus size={16} /> إضافة مسافر
-        </button>
+        <div className="flex items-center gap-2 relative">
+          <button
+            onClick={() => setShowColumnPicker(v => !v)}
+            className="border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            تخصيص الأعمدة
+          </button>
+          <button
+            onClick={exportPdf}
+            className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            تصدير PDF
+          </button>
+          <button
+            onClick={() => { setSelected(EMPTY); setModal('add') }}
+            className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus size={16} /> إضافة مسافر
+          </button>
+
+          {showColumnPicker && (
+            <div className="absolute left-0 top-12 z-20 bg-white border border-gray-200 shadow-lg rounded-xl p-3 w-64 space-y-2">
+              <p className="text-xs font-semibold text-gray-600 mb-1">إظهار/إخفاء الأعمدة</p>
+              {TRAVELLER_COLUMNS.map(col => (
+                <label key={col.key} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={selectedColumns[col.key]}
+                    onChange={e => setSelectedColumns(s => ({ ...s, [col.key]: e.target.checked }))}
+                  />
+                  <span>{col.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-3">
@@ -144,42 +268,32 @@ export default function TravellersPage() {
           <table className="hidden md:table w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">الاسم بالعربية</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">رقم البطاقة</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">الجنس</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">مصدر التصريح</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">اسم المجموعة</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">الباقة</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">التصريح</th>
+                {activeColumns.map(col => (
+                  <th key={col.key} className="text-right px-4 py-3 font-medium text-gray-600">{col.label}</th>
+                ))}
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filtered.map(t => (
                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-800">{t.full_name_ar}</td>
-                  <td className="px-4 py-3 text-gray-600 font-mono">{t.cpr_number}</td>
-                  <td className="px-4 py-3">
-                    {t.gender === 'male'   ? <span className="text-blue-600 text-xs font-medium">👨 رجل</span>
-                   : t.gender === 'female' ? <span className="text-pink-600 text-xs font-medium">👩 امرأة</span>
-                   : <span className="text-gray-300 text-xs">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
-                      ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {t.group_name === 'alammar' || t.group_name === 'sarhan' || t.group_name === 'other'
-                      ? GROUP_NAME_LABELS[t.group_name]
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{t.package_type ? PACKAGE_LABELS[t.package_type] : '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISA_LABELS[t.visa_status].className}`}>
-                      {VISA_LABELS[t.visa_status].label}
-                    </span>
-                  </td>
+                  {activeColumns.map(col => (
+                    <td key={col.key} className="px-4 py-3 text-gray-600">
+                      {col.key === 'visa_status' ? (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISA_LABELS[t.visa_status].className}`}>
+                          {VISA_LABELS[t.visa_status].label}
+                        </span>
+                      ) : col.key === 'gender' ? (
+                        t.gender === 'male' ? <span className="text-blue-600 text-xs font-medium">👨 رجل</span>
+                        : t.gender === 'female' ? <span className="text-pink-600 text-xs font-medium">🧕 امرأة</span>
+                        : <span className="text-gray-300 text-xs">—</span>
+                      ) : (
+                        <span className={col.key === 'cpr_number' || col.key === 'phone' || col.key === 'passport_number' ? 'font-mono' : ''}>
+                          {getColumnValue(t, col.key)}
+                        </span>
+                      )}
+                    </td>
+                  ))}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 justify-end">
                       <button onClick={() => navigate(`/travellers/${t.id}`)}
