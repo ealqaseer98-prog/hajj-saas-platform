@@ -162,7 +162,7 @@ export default function AdahiPage() {
       </head>
       <body>
         <div class="logo-wrap">
-          <img class="logo" src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/alammar%20logo.jpg" alt="Alammar Logo" />
+          <img class="logo" crossorigin="anonymous" src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/alammar%20logo.jpg" alt="Alammar Logo" />
         </div>
         <div class="header">
           <h1>🕌 حملة العمار للحج والعمرة</h1>
@@ -179,7 +179,7 @@ export default function AdahiPage() {
           <p>شكراً لكم — تقبل الله منكم</p>
           <p>حملة العمار للحج والعمرة</p>
         </div>
-        <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 1000); }</script>
+        <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 1000); }, 2000); }</script>
       </body>
       </html>
     `)
