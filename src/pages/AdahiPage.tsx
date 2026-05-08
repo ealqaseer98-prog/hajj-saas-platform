@@ -162,10 +162,10 @@ export default function AdahiPage() {
       </head>
       <body>
         <div class="logo-wrap">
-          <img class="logo" crossorigin="anonymous" src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/alammar%20logo.jpg" alt="Alammar Logo" />
+          <img class="logo" crossorigin="anonymous" src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png" alt="Alammar Logo" />
         </div>
         <div class="header">
-          <h1>🕌 حملة العمار للحج والعمرة</h1>
+          <h1>حملة العمار للحج والعمرة</h1>
           <h2>إيصال استلام أضحية</h2>
         </div>
         <div class="row"><span class="label">رقم الإيصال:</span><span class="value">${inv.invoice_number}</span></div>
@@ -176,7 +176,6 @@ export default function AdahiPage() {
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">نقدي</span></div>
         <div class="amount">المبلغ المستلم: ${DEFAULT_AMOUNT.toLocaleString()} ريال سعودي</div>
         <div class="footer">
-          <p>شكراً لكم — تقبل الله منكم</p>
           <p>حملة العمار للحج والعمرة</p>
         </div>
         <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 1000); }, 2000); }</script>
