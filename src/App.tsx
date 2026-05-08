@@ -17,9 +17,10 @@ import RoomsPage           from './pages/RoomsPage'
 import VisaTrackingPage    from './pages/VisaTrackingPage'
 import DocumentsPage       from './pages/DocumentsPage'
 import RemindersPage       from './pages/RemindersPage'
+import AdahiPage           from './pages/AdahiPage'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 0, refetchOnWindowFocus: true } }
+  defaultOptions: { queries: { staleTime: 1000 * 60 * 2 } }
 })
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="visa-tracking"          element={<VisaTrackingPage />} />
             <Route path="documents"              element={<DocumentsPage />} />
             <Route path="reminders"              element={<RemindersPage />} />
+            <Route path="adahi"                  element={<AdahiPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
