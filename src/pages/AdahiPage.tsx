@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Search, FileText, MessageSquare, Printer, Filter } from 'lucide-react'
+import { Search, FileText, Printer, Filter } from 'lucide-react'
 
 const SAR_CASH_ACCOUNT_ID = '18acae25-9a14-40ee-acd1-9f40f87cc142'
 const DEFAULT_AMOUNT      = 720
@@ -15,7 +15,6 @@ export default function AdahiPage() {
   const [search,       setSearch]       = useState('')
   const [listFilter,   setListFilter]   = useState<FilterType>('all')
   const [processing,   setProcessing]   = useState<string | null>(null)  // traveller id being processed
-  const [editPhone,    setEditPhone]    = useState<Record<string, string>>({}) // override phones
 
   // ── Fetch all travellers ──────────────────────────────────────────────────
   const { data: travellers = [], isLoading } = useQuery({
@@ -182,15 +181,6 @@ export default function AdahiPage() {
     win.document.close()
   }
 
-  // ── Send WhatsApp ─────────────────────────────────────────────────────────
-  const sendWhatsApp = (traveller: any) => {
-    const inv   = invoiceMap[traveller.id]
-    const phone = (editPhone[traveller.id] ?? traveller.phone ?? '').replace(/\D/g, '')
-    if (!phone) return alert('لا يوجد رقم هاتف لهذا الحاج')
-    const msg = `السلام عليكم ${traveller.full_name_ar}،\nتم استلام مبلغ الأضحية ${DEFAULT_AMOUNT} ريال سعودي.\nالوصف: ${DEFAULT_DESC}\nرقم الإيصال: ${inv?.invoice_number ?? '—'}\nتقبل الله منكم. 🕌`
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
-  }
-
   // ── Print full list ───────────────────────────────────────────────────────
   const printList = () => {
     const date     = new Date().toLocaleDateString('ar-BH')
@@ -328,7 +318,6 @@ export default function AdahiPage() {
         ) : filtered.map((t: any) => {
           const inv    = invoiceMap[t.id]
           const isPaid = !!inv
-          const phone  = editPhone[t.id] ?? t.phone ?? ''
 
           return (
             <div key={t.id} className={`bg-white rounded-xl border shadow-sm p-4 ${isPaid ? 'border-green-200' : 'border-gray-100'}`}>
@@ -361,23 +350,10 @@ export default function AdahiPage() {
                     </button>
                   ) : (
                     <>
-                      {/* Phone editable */}
-                      <input
-                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs w-32 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        dir="ltr"
-                        placeholder="رقم الهاتف"
-                        value={phone}
-                        onChange={e => setEditPhone(p => ({ ...p, [t.id]: e.target.value }))}
-                      />
                       <button
                         onClick={() => printReceipt(t)}
                         className="flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
                         <Printer size={13} /> إيصال PDF
-                      </button>
-                      <button
-                        onClick={() => sendWhatsApp(t)}
-                        className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-                        <MessageSquare size={13} /> واتساب
                       </button>
                       <button
                         onClick={() => window.confirm('حذف هذا الدفع؟') && deletePayment.mutate(t.id)}
