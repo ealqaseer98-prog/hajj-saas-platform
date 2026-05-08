@@ -156,11 +156,9 @@ export default function TripManifestPage() {
                 <tr className="border-b-2 border-gray-200">
                   <th className="text-right py-2 px-3 font-bold text-gray-700">#</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">الاسم بالعربية</th>
-                  <th className="text-right py-2 px-3 font-bold text-gray-700">Full Name</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">رقم البطاقة</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">جواز السفر</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">الجنس</th>
-                  <th className="text-right py-2 px-3 font-bold text-gray-700">التصريح</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">الهاتف</th>
                 </tr>
               </thead>
