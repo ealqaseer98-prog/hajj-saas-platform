@@ -573,6 +573,15 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
               <option value="saudi">السعودية</option><option value="other">أخرى</option>
             </select>
           </Field>
+          <Field label="الباقة">
+            <select className={ic} value={data.package_type ?? ''} onChange={f('package_type')}>
+              <option value="">— اختر —</option>
+              <option value="barr">البر</option>
+              <option value="tayaran_dammam">طيران - الدمام</option>
+              <option value="tayaran_bahrain">طيران - البحرين</option>
+              <option value="tasreeh_only">فقط تصريح</option>
+            </select>
+          </Field>
           <Field label="حالة التصريح">
             <select className={ic} value={data.visa_status ?? 'pending'} onChange={f('visa_status')}>
               <option value="pending">في الانتظار</option>
