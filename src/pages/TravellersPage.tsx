@@ -19,7 +19,7 @@ const PACKAGE_LABELS: Record<PackageType, string> = {
   tasreeh_only: 'فقط تصريح',
 }
 
-const TASREEH_SOURCE_LABELS: Record<'bahrain' | 'saudi', string> = {
+const TASREEH_SOURCE_LABELS: Record<'bahrain' | 'saudi' | 'other', string> = {
   bahrain: 'البحرين',
   saudi: 'السعودية',
   other: 'أخرى',
@@ -69,6 +69,12 @@ export default function TravellersPage() {
   const [modal, setModal]             = useState<'add' | 'edit' | null>(null)
   const [selected, setSelected]       = useState<Partial<Traveller>>(EMPTY)
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all')
+  const [packageFilter, setPackageFilter] = useState<'all' | PackageType>('all')
+  const [groupFilter, setGroupFilter] = useState<'all' | 'alammar' | 'sarhan' | 'other'>('all')
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
+  const [visaFilter, setVisaFilter] = useState<'all' | VisaStatus>('all')
+  const [sortBy, setSortBy] = useState<'name' | 'cpr' | 'gender' | 'package'>('name')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [showColumnPicker, setShowColumnPicker] = useState(false)
   const [selectedColumns, setSelectedColumns] = useState<Record<TravellerColumnKey, boolean>>({
     full_name_ar: true,
@@ -97,9 +103,32 @@ export default function TravellersPage() {
     },
   })
 
-  const filtered = genderFilter === 'all'
-    ? travellers
-    : travellers.filter(t => t.gender === genderFilter)
+  const filtered = travellers
+    .filter(t => (genderFilter === 'all' ? true : t.gender === genderFilter))
+    .filter(t => (packageFilter === 'all' ? true : t.package_type === packageFilter))
+    .filter(t => (groupFilter === 'all' ? true : t.group_name === groupFilter))
+    .filter(t => (sourceFilter === 'all' ? true : t.tasreeh_source === sourceFilter))
+    .filter(t => (visaFilter === 'all' ? true : t.visa_status === visaFilter))
+    .sort((a, b) => {
+      const dir = sortDirection === 'asc' ? 1 : -1
+      if (sortBy === 'name') return (a.full_name_ar ?? '').localeCompare(b.full_name_ar ?? '', 'ar') * dir
+      if (sortBy === 'cpr') return (a.cpr_number ?? '').localeCompare(b.cpr_number ?? '', 'en') * dir
+      if (sortBy === 'gender') {
+        const gv = (g: Traveller['gender']) => (g === 'male' ? 1 : g === 'female' ? 2 : 3)
+        return (gv(a.gender) - gv(b.gender)) * dir
+      }
+      const pl = (p: Traveller['package_type']) => (p ? PACKAGE_LABELS[p] : '')
+      return pl(a.package_type).localeCompare(pl(b.package_type), 'ar') * dir
+    })
+
+  const hasActiveFilters =
+    genderFilter !== 'all' ||
+    packageFilter !== 'all' ||
+    groupFilter !== 'all' ||
+    sourceFilter !== 'all' ||
+    visaFilter !== 'all' ||
+    sortBy !== 'name' ||
+    sortDirection !== 'asc'
 
   const maleCount   = travellers.filter(t => t.gender === 'male').length
   const femaleCount = travellers.filter(t => t.gender === 'female').length
@@ -121,8 +150,9 @@ export default function TravellersPage() {
   })
 
   const del = useMutation({
-    mutationFn: (id: string) =>
-      supabase.from('travellers').delete().eq('id', id).throwOnError(),
+    mutationFn: async (id: string) => {
+      await supabase.from('travellers').delete().eq('id', id).throwOnError()
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['travellers'] }),
   })
 
@@ -165,11 +195,11 @@ export default function TravellersPage() {
 
     const escapeHtml = (value: string) =>
       value
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
 
     const tableHead = activeColumns
       .map(c => `<th>${escapeHtml(c.label)}</th>`)
@@ -287,7 +317,7 @@ export default function TravellersPage() {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3">
+      <div className="flex flex-col gap-3">
         <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
@@ -298,15 +328,65 @@ export default function TravellersPage() {
             className="w-full border border-gray-200 rounded-lg pr-10 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-full md:w-auto">
-          {(['all','male','female'] as const).map(v => (
-            <button key={v} onClick={() => setGenderFilter(v)}
-              className={`flex-1 md:flex-none px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                genderFilter === v ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
-              }`}>
-              {v === 'all' ? 'الكل' : v === 'male' ? 'رجال' : 'نساء'}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-2">
+          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={genderFilter} onChange={e => setGenderFilter(e.target.value as 'all' | 'male' | 'female')}>
+            <option value="all">الجنس: الكل</option>
+            <option value="male">الجنس: رجال</option>
+            <option value="female">الجنس: نساء</option>
+          </select>
+          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={packageFilter} onChange={e => setPackageFilter(e.target.value as 'all' | PackageType)}>
+            <option value="all">الباقة: الكل</option>
+            <option value="barr">الباقة: البر</option>
+            <option value="tayaran_dammam">الباقة: طيران - الدمام</option>
+            <option value="tayaran_bahrain">الباقة: طيران - البحرين</option>
+            <option value="tasreeh_only">الباقة: فقط تصريح</option>
+          </select>
+          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={groupFilter} onChange={e => setGroupFilter(e.target.value as 'all' | 'alammar' | 'sarhan' | 'other')}>
+            <option value="all">اسم المجموعة: الكل</option>
+            <option value="alammar">اسم المجموعة: العمار</option>
+            <option value="sarhan">اسم المجموعة: السرحان</option>
+            <option value="other">اسم المجموعة: أخرى</option>
+          </select>
+          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={sourceFilter} onChange={e => setSourceFilter(e.target.value as 'all' | 'bahrain' | 'saudi' | 'other')}>
+            <option value="all">مصدر التصريح: الكل</option>
+            <option value="bahrain">مصدر التصريح: البحرين</option>
+            <option value="saudi">مصدر التصريح: السعودية</option>
+            <option value="other">مصدر التصريح: أخرى</option>
+          </select>
+          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={visaFilter} onChange={e => setVisaFilter(e.target.value as 'all' | VisaStatus)}>
+            <option value="all">حالة التصريح: الكل</option>
+            <option value="pending">حالة التصريح: في الانتظار</option>
+            <option value="approved">حالة التصريح: موافق عليه</option>
+            <option value="rejected">حالة التصريح: مرفوض</option>
+          </select>
+          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={sortBy} onChange={e => setSortBy(e.target.value as 'name' | 'cpr' | 'gender' | 'package')}>
+            <option value="name">الفرز: الاسم</option>
+            <option value="cpr">الفرز: رقم البطاقة</option>
+            <option value="gender">الفرز: الجنس</option>
+            <option value="package">الفرز: الباقة</option>
+          </select>
+          <button
+            onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            {sortDirection === 'asc' ? 'تصاعدي' : 'تنازلي'}
+          </button>
+          {hasActiveFilters && (
+            <button
+              onClick={() => {
+                setGenderFilter('all')
+                setPackageFilter('all')
+                setGroupFilter('all')
+                setSourceFilter('all')
+                setVisaFilter('all')
+                setSortBy('name')
+                setSortDirection('asc')
+              }}
+              className="border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm font-medium hover:bg-red-50"
+            >
+              مسح الفلاتر
             </button>
-          ))}
+          )}
         </div>
       </div>
 
