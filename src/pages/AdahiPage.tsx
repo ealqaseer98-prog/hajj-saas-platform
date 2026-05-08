@@ -168,7 +168,7 @@ export default function AdahiPage() {
         <div class="row"><span class="label">التاريخ:</span><span class="value">${date}</span></div>
         <div class="row"><span class="label">اسم الحاج:</span><span class="value">${traveller.full_name_ar}</span></div>
         <div class="row"><span class="label">رقم البطاقة:</span><span class="value">${traveller.cpr_number}</span></div>
-        <div class="row"><span class="label">البيان:</span><span class="value">${DEFAULT_DESC}</span></div>
+        <div class="row"><span class="label">الوصف:</span><span class="value">${DEFAULT_DESC}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">نقدي</span></div>
         <div class="amount">المبلغ المستلم: ${DEFAULT_AMOUNT.toLocaleString()} ريال سعودي</div>
         <div class="footer">
@@ -187,7 +187,7 @@ export default function AdahiPage() {
     const inv   = invoiceMap[traveller.id]
     const phone = (editPhone[traveller.id] ?? traveller.phone ?? '').replace(/\D/g, '')
     if (!phone) return alert('لا يوجد رقم هاتف لهذا الحاج')
-    const msg = `السلام عليكم ${traveller.full_name_ar}،\nتم استلام مبلغ الأضحية ${DEFAULT_AMOUNT} ريال سعودي.\nالبيان: ${DEFAULT_DESC}\nرقم الإيصال: ${inv?.invoice_number ?? '—'}\nتقبل الله منكم. 🕌`
+    const msg = `السلام عليكم ${traveller.full_name_ar}،\nتم استلام مبلغ الأضحية ${DEFAULT_AMOUNT} ريال سعودي.\nالوصف: ${DEFAULT_DESC}\nرقم الإيصال: ${inv?.invoice_number ?? '—'}\nتقبل الله منكم. 🕌`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
