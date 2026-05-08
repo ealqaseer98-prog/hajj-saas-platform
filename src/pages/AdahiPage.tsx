@@ -147,6 +147,8 @@ export default function AdahiPage() {
         <style>
           * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
           body { margin: 20px; direction: rtl; }
+          .logo-wrap { text-align: center; margin-bottom: 8px; }
+          .logo { height: 80px; width: auto; object-fit: contain; }
           .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
           .header h1 { font-size: 20px; margin: 0; }
           .header h2 { font-size: 16px; margin: 5px 0; color: #555; }
@@ -159,6 +161,9 @@ export default function AdahiPage() {
         </style>
       </head>
       <body>
+        <div class="logo-wrap">
+          <img class="logo" src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/alammar%20logo.jpg" alt="Alammar Logo" />
+        </div>
         <div class="header">
           <h1>🕌 حملة العمار للحج والعمرة</h1>
           <h2>إيصال استلام أضحية</h2>
