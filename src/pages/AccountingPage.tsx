@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer } from 'lucide-react'
+import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2 } from 'lucide-react'
 import type { Invoice, Receipt, Expense, Traveller, Trip, Account, ExpenseCategory } from '../types'
 
 type Tab = 'invoices' | 'receipts' | 'expenses'
@@ -55,6 +55,7 @@ function InvoicesTab() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Invoice>>({ currency: 'BHD', status: 'unpaid', issue_date: today() })
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
@@ -73,10 +74,19 @@ function InvoicesTab() {
 
   const save = useMutation({
     mutationFn: async (inv: Partial<Invoice>) => {
+      if (editingId) {
+        await supabase.from('invoices').update(inv).eq('id', editingId).throwOnError()
+        return
+      }
       const num = await nextNumber('invoices', 'invoice_number', 'INV')
       await supabase.from('invoices').insert({ ...inv, invoice_number: num }).throwOnError()
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['invoices'] }); setModal(false) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      setModal(false)
+      setEditingId(null)
+      setSel({ currency: 'BHD', status: 'unpaid', issue_date: today() })
+    },
   })
 
   const del = useMutation({
@@ -114,7 +124,7 @@ function InvoicesTab() {
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-red-600 font-medium">المستحق: {totalUnpaid.toFixed(3)} BHD</p>
-        <button onClick={() => setModal(true)}
+        <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', status: 'unpaid', issue_date: today() }); setModal(true) }}
           className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <Plus size={15} /> فاتورة جديدة
         </button>
@@ -131,12 +141,30 @@ function InvoicesTab() {
           `${Number(i.amount_paid).toFixed(3)} ${i.currency ?? 'BHD'}`,
           <StatusBadge status={i.status} />,
         ])}
+        onEdit={id => {
+          const inv = invoices[id]
+          setEditingId(inv.id)
+          setSel({
+            traveller_id: inv.traveller_id ?? '',
+            trip_id: inv.trip_id ?? '',
+            account_id: inv.account_id ?? '',
+            amount: Number(inv.amount ?? 0),
+            currency: inv.currency ?? 'BHD',
+            description: inv.description ?? '',
+            due_date: inv.due_date ?? '',
+            notes: inv.notes ?? '',
+            status: inv.status ?? 'unpaid',
+            issue_date: inv.issue_date ?? today(),
+            amount_paid: Number(inv.amount_paid ?? 0),
+          })
+          setModal(true)
+        }}
         onPrint={id => printInvoice(invoices[id])}
         onDelete={id => window.confirm('حذف الفاتورة؟') && del.mutate(invoices[id].id)}
       />
 
       {modal && (
-        <Modal title="فاتورة جديدة" onClose={() => setModal(false)} onSave={() => save.mutate(sel)} saving={save.isPending}>
+        <Modal title={editingId ? 'تعديل الفاتورة' : 'فاتورة جديدة'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate(sel)} saving={save.isPending}>
           <Select label="الحاج" value={sel.traveller_id ?? ''}
             onChange={v => setSel(s => ({ ...s, traveller_id: v }))}
             options={travellers.map((t: Traveller) => ({ value: t.id, label: t.full_name_ar }))} />
@@ -168,6 +196,7 @@ function ReceiptsTab() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Receipt>>({ currency: 'BHD', payment_method: 'cash', payment_date: today() })
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const { data: receipts = [] } = useQuery({
     queryKey: ['receipts'],
@@ -191,6 +220,15 @@ function ReceiptsTab() {
 
   const save = useMutation({
     mutationFn: async (r: Partial<Receipt>) => {
+      if (editingId) {
+        await supabase.from('receipts').update({
+          ...r,
+          traveller_id: r.traveller_id || null,
+          invoice_id: r.invoice_id || null,
+          account_id: r.account_id || null,
+        }).eq('id', editingId).throwOnError()
+        return
+      }
       const num = await nextNumber('receipts', 'receipt_number', 'RCP')
       await supabase.from('receipts').insert({ 
         ...r, 
@@ -200,7 +238,12 @@ function ReceiptsTab() {
         account_id:   r.account_id   || null,
       }).throwOnError()
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['receipts', 'invoices', 'accounts-list'] }); setModal(false) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['receipts', 'invoices', 'accounts-list'] })
+      setModal(false)
+      setEditingId(null)
+      setSel({ currency: 'BHD', payment_method: 'cash', payment_date: today() })
+    },
   })
 
   const del = useMutation({
@@ -227,7 +270,7 @@ function ReceiptsTab() {
   return (
     <>
       <div className="flex justify-end">
-        <button onClick={() => setModal(true)}
+        <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', payment_method: 'cash', payment_date: today() }); setModal(true) }}
           className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <Plus size={15} /> إيصال دفع جديد
         </button>
@@ -244,12 +287,27 @@ function ReceiptsTab() {
           PAYMENT_LABELS[r.payment_method as string] ?? r.payment_method,
           r.payment_date,
         ])}
+        onEdit={id => {
+          const r = receipts[id]
+          setEditingId(r.id)
+          setSel({
+            traveller_id: r.traveller_id ?? '',
+            invoice_id: r.invoice_id ?? '',
+            account_id: r.account_id ?? '',
+            amount: Number(r.amount ?? 0),
+            currency: r.currency ?? 'BHD',
+            payment_method: r.payment_method ?? 'cash',
+            payment_date: r.payment_date ?? today(),
+            notes: r.notes ?? '',
+          })
+          setModal(true)
+        }}
         onPrint={id => printReceipt(receipts[id])}
         onDelete={id => window.confirm('حذف الإيصال؟') && del.mutate(receipts[id].id)}
       />
 
       {modal && (
-        <Modal title="إيصال دفع جديد" onClose={() => setModal(false)} onSave={() => save.mutate(sel)} saving={save.isPending}>
+        <Modal title={editingId ? 'تعديل الإيصال' : 'إيصال دفع جديد'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate(sel)} saving={save.isPending}>
           <Select label="الحاج" value={sel.traveller_id ?? ''}
             onChange={v => setSel(s => ({ ...s, traveller_id: v }))}
             options={travellers.map((t: Traveller) => ({ value: t.id, label: t.full_name_ar }))} />
@@ -282,6 +340,7 @@ function ExpensesTab() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Expense>>({ currency: 'BHD', expense_date: today() })
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const { data: expenses = [] } = useQuery({
     queryKey: ['expenses'],
@@ -301,10 +360,19 @@ function ExpensesTab() {
 
   const save = useMutation({
     mutationFn: async (e: Partial<Expense>) => {
+      if (editingId) {
+        await supabase.from('expenses').update(e).eq('id', editingId).throwOnError()
+        return
+      }
       const num = await nextNumber('expenses', 'expense_number', 'EXP')
       await supabase.from('expenses').insert({ ...e, expense_number: num }).throwOnError()
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses', 'accounts-list'] }); setModal(false) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses', 'accounts-list'] })
+      setModal(false)
+      setEditingId(null)
+      setSel({ currency: 'BHD', expense_date: today() })
+    },
   })
 
   const del = useMutation({
@@ -333,7 +401,7 @@ function ExpensesTab() {
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-red-600 font-medium">إجمالي المصروفات: {totalExpenses.toFixed(3)} BHD</p>
-        <button onClick={() => setModal(true)}
+        <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', expense_date: today() }); setModal(true) }}
           className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <Plus size={15} /> مصروف جديد
         </button>
@@ -350,12 +418,27 @@ function ExpensesTab() {
           `${Number(e.amount).toFixed(3)} BHD`,
           e.expense_date,
         ])}
+        onEdit={id => {
+          const e = expenses[id]
+          setEditingId(e.id)
+          setSel({
+            description: e.description ?? '',
+            account_id: e.account_id ?? '',
+            trip_id: e.trip_id ?? '',
+            amount: Number(e.amount ?? 0),
+            currency: e.currency ?? 'BHD',
+            category: e.category ?? '',
+            expense_date: e.expense_date ?? today(),
+            notes: e.notes ?? '',
+          })
+          setModal(true)
+        }}
         onPrint={id => printExpense(expenses[id])}
         onDelete={id => window.confirm('حذف المصروف؟') && del.mutate(expenses[id].id)}
       />
 
       {modal && (
-        <Modal title="مصروف جديد" onClose={() => setModal(false)} onSave={() => save.mutate(sel)} saving={save.isPending}>
+        <Modal title={editingId ? 'تعديل المصروف' : 'مصروف جديد'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate(sel)} saving={save.isPending}>
           <Input label="الوصف *" value={sel.description ?? ''}
             onChange={v => setSel(s => ({ ...s, description: v }))} />
           <Select label="العملة *" value={selectedCurrency}
@@ -476,7 +559,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? ''}`}>{lbl[status] ?? status}</span>
 }
 
-function AccountingTable({ columns, rows, onDelete, onPrint }: { columns: string[]; rows: React.ReactNode[][]; onDelete: (i: number) => void; onPrint: (i: number) => void }) {
+function AccountingTable({ columns, rows, onDelete, onPrint, onEdit }: { columns: string[]; rows: React.ReactNode[][]; onDelete: (i: number) => void; onPrint: (i: number) => void; onEdit: (i: number) => void }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       {rows.length === 0 ? (
@@ -496,6 +579,9 @@ function AccountingTable({ columns, rows, onDelete, onPrint }: { columns: string
                   {row.map((cell, j) => <td key={j} className="px-4 py-3 text-gray-700">{cell}</td>)}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
+                      <button onClick={() => onEdit(i)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                        <Edit2 size={14} />
+                      </button>
                       <button onClick={() => onPrint(i)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
                         <Printer size={14} />
                       </button>
@@ -521,6 +607,9 @@ function AccountingTable({ columns, rows, onDelete, onPrint }: { columns: string
                   ))}
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end gap-1">
+                  <button onClick={() => onEdit(i)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                    <Edit2 size={14} />
+                  </button>
                   <button onClick={() => onPrint(i)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
                     <Printer size={14} />
                   </button>
