@@ -3,11 +3,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, Edit2, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown } from 'lucide-react'
+import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer } from 'lucide-react'
 import type { Invoice, Receipt, Expense, Traveller, Trip, Account, ExpenseCategory } from '../types'
 
 type Tab = 'invoices' | 'receipts' | 'expenses'
 type Currency = 'BHD' | 'SAR'
+const COMPANY_TITLE = 'حملة العمار للحج والعمرة'
+const COMPANY_LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
 export default function AccountingPage() {
   const [tab, setTab] = useState<Tab>('invoices')
@@ -81,6 +83,27 @@ function InvoicesTab() {
   const totalUnpaid = invoices.filter(i => i.status !== 'paid').reduce((s: number, i: any) => s + (i.amount - i.amount_paid), 0)
   const selectedCurrency = (sel.currency ?? 'BHD') as Currency
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
+  const printInvoice = (inv: any) => {
+    const amount = Number(inv.amount ?? 0)
+    const amountPaid = Number(inv.amount_paid ?? 0)
+    const remaining = amount - amountPaid
+    openPrintWindow({
+      docType: 'فاتورة',
+      rows: [
+        ['رقم الفاتورة', inv.invoice_number ?? '—'],
+        ['اسم الحاج', inv.traveller?.full_name_ar ?? '—'],
+        ['اسم الرحلة', inv.trip?.trip_name ?? '—'],
+        ['اسم الحساب', inv.account?.name ?? '—'],
+        ['المبلغ', `${amount.toFixed(3)} ${inv.currency ?? 'BHD'}`],
+        ['المدفوع', `${amountPaid.toFixed(3)} ${inv.currency ?? 'BHD'}`],
+        ['المتبقي', `${remaining.toFixed(3)} ${inv.currency ?? 'BHD'}`],
+        ['الوصف', inv.description ?? '—'],
+        ['تاريخ الإصدار', inv.issue_date ?? '—'],
+        ['تاريخ الاستحقاق', inv.due_date ?? '—'],
+        ['الحالة', STATUS_TEXT[inv.status as string] ?? inv.status ?? '—'],
+      ],
+    })
+  }
 
   return (
     <>
@@ -103,6 +126,7 @@ function InvoicesTab() {
           `${Number(i.amount_paid).toFixed(3)} ${i.currency ?? 'BHD'}`,
           <StatusBadge status={i.status} />,
         ])}
+        onPrint={id => printInvoice(invoices[id])}
         onDelete={id => window.confirm('حذف الفاتورة؟') && del.mutate(invoices[id].id)}
       />
 
@@ -180,6 +204,20 @@ function ReceiptsTab() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['receipts'] }),
   })
+  const printReceipt = (rcp: any) => {
+    openPrintWindow({
+      docType: 'إيصال',
+      rows: [
+        ['رقم الإيصال', rcp.receipt_number ?? '—'],
+        ['اسم الحاج', rcp.traveller?.full_name_ar ?? '—'],
+        ['رقم الفاتورة', rcp.invoice?.invoice_number ?? '—'],
+        ['اسم الحساب', rcp.account?.name ?? '—'],
+        ['المبلغ', `${Number(rcp.amount ?? 0).toFixed(3)} ${rcp.currency ?? 'BHD'}`],
+        ['طريقة الدفع', PAYMENT_LABELS[rcp.payment_method as string] ?? rcp.payment_method ?? '—'],
+        ['تاريخ الدفع', rcp.payment_date ?? '—'],
+      ],
+    })
+  }
 
   return (
     <>
@@ -201,6 +239,7 @@ function ReceiptsTab() {
           PAYMENT_LABELS[r.payment_method as string] ?? r.payment_method,
           r.payment_date,
         ])}
+        onPrint={id => printReceipt(receipts[id])}
         onDelete={id => window.confirm('حذف الإيصال؟') && del.mutate(receipts[id].id)}
       />
 
@@ -271,6 +310,20 @@ function ExpensesTab() {
   })
 
   const totalExpenses = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0)
+  const printExpense = (exp: any) => {
+    openPrintWindow({
+      docType: 'سند مصروف',
+      rows: [
+        ['رقم المصروف', exp.expense_number ?? '—'],
+        ['الوصف', exp.description ?? '—'],
+        ['اسم الحساب', exp.account?.name ?? '—'],
+        ['اسم الرحلة', exp.trip?.trip_name ?? '—'],
+        ['الفئة', CATEGORY_LABELS[exp.category as string] ?? exp.category ?? '—'],
+        ['المبلغ', `${Number(exp.amount ?? 0).toFixed(3)} ${exp.currency ?? 'BHD'}`],
+        ['تاريخ المصروف', exp.expense_date ?? '—'],
+      ],
+    })
+  }
 
   return (
     <>
@@ -293,6 +346,7 @@ function ExpensesTab() {
           `${Number(e.amount).toFixed(3)} BHD`,
           e.expense_date,
         ])}
+        onPrint={id => printExpense(expenses[id])}
         onDelete={id => window.confirm('حذف المصروف؟') && del.mutate(expenses[id].id)}
       />
 
@@ -330,8 +384,65 @@ function ExpensesTab() {
 // ── Shared helpers ────────────────────────────────────────────────────────────
 const PAYMENT_LABELS: Record<string, string> = { cash: 'نقدي', bank_transfer: 'تحويل بنكي', cheque: 'شيك' }
 const CATEGORY_LABELS: Record<string, string> = { hotel: 'فندق', transport: 'مواصلات', food: 'طعام', visa: 'تصريح', other: 'أخرى' }
+const STATUS_TEXT: Record<string, string> = { paid: 'مدفوعة', unpaid: 'غير مدفوعة', partial: 'جزئية', cancelled: 'ملغاة' }
 
 function today() { return new Date().toISOString().slice(0, 10) }
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function openPrintWindow({ docType, rows }: { docType: string; rows: [string, string][] }) {
+  const win = window.open('', '_blank', 'width=1100,height=800')
+  if (!win) return
+  const todayText = new Date().toLocaleDateString('ar-BH')
+  const tableRows = rows
+    .map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value || '—')}</td></tr>`)
+    .join('')
+
+  win.document.write(`
+    <!doctype html>
+    <html dir="rtl" lang="ar">
+    <head>
+      <meta charset="UTF-8" />
+      <title>${escapeHtml(docType)}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+      <style>
+        @page { size: A4; margin: 10mm; }
+        * { box-sizing: border-box; font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
+        body { margin: 0; padding: 24px; color: #111827; }
+        .logo-wrap { text-align: center; margin-bottom: 10px; }
+        .logo { height: 80px; width: auto; object-fit: contain; }
+        .title { text-align: center; margin-bottom: 4px; font-size: 24px; font-weight: 700; }
+        .subtitle { text-align: center; margin-bottom: 2px; font-size: 18px; color: #374151; }
+        .date { text-align: center; margin: 0 0 14px; font-size: 13px; color: #6b7280; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #d1d5db; padding: 8px 10px; font-size: 14px; vertical-align: top; }
+        th { width: 32%; background: #f3f4f6; text-align: right; }
+        td { text-align: right; }
+      </style>
+    </head>
+    <body>
+      <div class="logo-wrap">
+        <img class="logo" crossorigin="anonymous" src="${COMPANY_LOGO_URL}" alt="Logo" />
+      </div>
+      <h1 class="title">${COMPANY_TITLE}</h1>
+      <h2 class="subtitle">${escapeHtml(docType)}</h2>
+      <p class="date">التاريخ: ${escapeHtml(todayText)}</p>
+      <table><tbody>${tableRows}</tbody></table>
+      <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 500); }, 900); }</script>
+    </body>
+    </html>
+  `)
+  win.document.close()
+}
 
 async function fetchTravellers() {
   const { data } = await supabase.from('travellers').select('id, full_name_ar').order('full_name_ar')
@@ -361,7 +472,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? ''}`}>{lbl[status] ?? status}</span>
 }
 
-function AccountingTable({ columns, rows, onDelete }: { columns: string[]; rows: React.ReactNode[][]; onDelete: (i: number) => void }) {
+function AccountingTable({ columns, rows, onDelete, onPrint }: { columns: string[]; rows: React.ReactNode[][]; onDelete: (i: number) => void; onPrint: (i: number) => void }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       {rows.length === 0 ? (
@@ -380,9 +491,14 @@ function AccountingTable({ columns, rows, onDelete }: { columns: string[]; rows:
                 <tr key={i} className="hover:bg-gray-50">
                   {row.map((cell, j) => <td key={j} className="px-4 py-3 text-gray-700">{cell}</td>)}
                   <td className="px-4 py-3">
-                    <button onClick={() => onDelete(i)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex items-center gap-1 justify-end">
+                      <button onClick={() => onPrint(i)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                        <Printer size={14} />
+                      </button>
+                      <button onClick={() => onDelete(i)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -400,7 +516,10 @@ function AccountingTable({ columns, rows, onDelete }: { columns: string[]; rows:
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end">
+                <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end gap-1">
+                  <button onClick={() => onPrint(i)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                    <Printer size={14} />
+                  </button>
                   <button onClick={() => onDelete(i)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
                     <Trash2 size={14} />
                   </button>
