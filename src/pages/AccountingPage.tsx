@@ -99,7 +99,6 @@ function InvoicesTab() {
         ['رقم الفاتورة', inv.invoice_number ?? '—'],
         ['اسم الحاج', inv.traveller?.full_name_ar ?? '—'],
         ['الباقة', inv.traveller?.package_type ? (PACKAGE_TYPE_LABELS[inv.traveller.package_type] ?? inv.traveller.package_type) : '—'],
-        ['اسم الحساب', inv.account?.name ?? '—'],
         ['المبلغ', `${amount.toFixed(3)} ${inv.currency ?? 'BHD'}`],
         ['المدفوع', `${amountPaid.toFixed(3)} ${inv.currency ?? 'BHD'}`],
         ['المتبقي', `${remaining.toFixed(3)} ${inv.currency ?? 'BHD'}`],
@@ -218,7 +217,6 @@ function ReceiptsTab() {
         ['اسم الحاج', rcp.traveller?.full_name_ar ?? '—'],
         ['الباقة', rcp.traveller?.package_type ? (PACKAGE_TYPE_LABELS[rcp.traveller.package_type] ?? rcp.traveller.package_type) : '—'],
         ['رقم الفاتورة', rcp.invoice?.invoice_number ?? '—'],
-        ['اسم الحساب', rcp.account?.name ?? '—'],
         ['المبلغ', `${Number(rcp.amount ?? 0).toFixed(3)} ${rcp.currency ?? 'BHD'}`],
         ['طريقة الدفع', PAYMENT_LABELS[rcp.payment_method as string] ?? rcp.payment_method ?? '—'],
         ['تاريخ الدفع', rcp.payment_date ?? '—'],
@@ -323,7 +321,6 @@ function ExpensesTab() {
       rows: [
         ['رقم المصروف', exp.expense_number ?? '—'],
         ['الوصف', exp.description ?? '—'],
-        ['اسم الحساب', exp.account?.name ?? '—'],
         ['الباقة', exp.traveller?.package_type ? (PACKAGE_TYPE_LABELS[exp.traveller.package_type] ?? exp.traveller.package_type) : '—'],
         ['الفئة', CATEGORY_LABELS[exp.category as string] ?? exp.category ?? '—'],
         ['المبلغ', `${Number(exp.amount ?? 0).toFixed(3)} ${exp.currency ?? 'BHD'}`],
