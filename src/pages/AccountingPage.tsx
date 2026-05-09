@@ -302,6 +302,10 @@ function ReceiptsTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['receipts', 'invoices', 'accounts-list'] })
+      qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['accounts-list'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
       setModal(false)
       setEditingReceipt(null)
       setSel({ currency: 'BHD', payment_method: 'cash', payment_date: today() })
