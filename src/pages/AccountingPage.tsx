@@ -10,6 +10,12 @@ type Tab = 'invoices' | 'receipts' | 'expenses'
 type Currency = 'BHD' | 'SAR'
 const COMPANY_TITLE = 'حملة العمار للحج والعمرة'
 const COMPANY_LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
+const PACKAGE_TYPE_LABELS: Record<string, string> = {
+  barr: 'البر',
+  tayaran_dammam: 'طيران - الدمام',
+  tayaran_bahrain: 'طيران - البحرين',
+  tasreeh_only: 'فقط تصريح',
+}
 
 export default function AccountingPage() {
   const [tab, setTab] = useState<Tab>('invoices')
@@ -55,7 +61,7 @@ function InvoicesTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('invoices')
-        .select('*, traveller:travellers(full_name_ar), trip:trips(trip_name), account:accounts(name)')
+        .select('*, traveller:travellers(full_name_ar, package_type), trip:trips(trip_name), account:accounts(name)')
         .order('issue_date', { ascending: false })
       return (data ?? []) as any[]
     },
@@ -92,7 +98,7 @@ function InvoicesTab() {
       rows: [
         ['رقم الفاتورة', inv.invoice_number ?? '—'],
         ['اسم الحاج', inv.traveller?.full_name_ar ?? '—'],
-        ['اسم الرحلة', inv.trip?.trip_name ?? '—'],
+        ['الباقة', inv.traveller?.package_type ? (PACKAGE_TYPE_LABELS[inv.traveller.package_type] ?? inv.traveller.package_type) : '—'],
         ['اسم الحساب', inv.account?.name ?? '—'],
         ['المبلغ', `${amount.toFixed(3)} ${inv.currency ?? 'BHD'}`],
         ['المدفوع', `${amountPaid.toFixed(3)} ${inv.currency ?? 'BHD'}`],
@@ -169,7 +175,7 @@ function ReceiptsTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('receipts')
-        .select('*, traveller:travellers(full_name_ar), invoice:invoices(invoice_number), account:accounts(name)')
+        .select('*, traveller:travellers(full_name_ar, package_type), invoice:invoices(invoice_number), account:accounts(name)')
         .order('payment_date', { ascending: false })
       return (data ?? []) as any[]
     },
@@ -210,6 +216,7 @@ function ReceiptsTab() {
       rows: [
         ['رقم الإيصال', rcp.receipt_number ?? '—'],
         ['اسم الحاج', rcp.traveller?.full_name_ar ?? '—'],
+        ['الباقة', rcp.traveller?.package_type ? (PACKAGE_TYPE_LABELS[rcp.traveller.package_type] ?? rcp.traveller.package_type) : '—'],
         ['رقم الفاتورة', rcp.invoice?.invoice_number ?? '—'],
         ['اسم الحساب', rcp.account?.name ?? '—'],
         ['المبلغ', `${Number(rcp.amount ?? 0).toFixed(3)} ${rcp.currency ?? 'BHD'}`],
@@ -283,7 +290,7 @@ function ExpensesTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('expenses')
-        .select('*, account:accounts(name), trip:trips(trip_name)')
+        .select('*, account:accounts(name), trip:trips(trip_name), traveller:travellers(package_type)')
         .order('expense_date', { ascending: false })
       return (data ?? []) as any[]
     },
@@ -317,7 +324,7 @@ function ExpensesTab() {
         ['رقم المصروف', exp.expense_number ?? '—'],
         ['الوصف', exp.description ?? '—'],
         ['اسم الحساب', exp.account?.name ?? '—'],
-        ['اسم الرحلة', exp.trip?.trip_name ?? '—'],
+        ['الباقة', exp.traveller?.package_type ? (PACKAGE_TYPE_LABELS[exp.traveller.package_type] ?? exp.traveller.package_type) : '—'],
         ['الفئة', CATEGORY_LABELS[exp.category as string] ?? exp.category ?? '—'],
         ['المبلغ', `${Number(exp.amount ?? 0).toFixed(3)} ${exp.currency ?? 'BHD'}`],
         ['تاريخ المصروف', exp.expense_date ?? '—'],
