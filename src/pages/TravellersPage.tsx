@@ -527,7 +527,7 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
           <Field label="الاسم بالعربية *" required>
             <input className={ic} value={data.full_name_ar ?? ''} onChange={f('full_name_ar')} />
           </Field>
-          <Field label="الاسم بالإنجليزية *" required>
+          <Field label="الاسم بالإنجليزية">
             <input className={ic} value={data.full_name_en ?? ''} onChange={f('full_name_en')} dir="ltr" />
           </Field>
           <Field label="رقم البطاقة الشخصية (CPR) *" required>
@@ -603,7 +603,7 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
 
         <div className="flex gap-3 pt-2">
           <button onClick={onSave}
-            disabled={saving || !data.cpr_number || !data.full_name_ar || !data.full_name_en}
+            disabled={saving || !data.cpr_number || !data.full_name_ar}
             className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
             {saving ? 'جارٍ الحفظ...' : 'حفظ'}
           </button>
