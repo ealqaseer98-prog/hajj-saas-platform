@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2 } from 'lucide-react'
+import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search } from 'lucide-react'
 import type { Invoice, Receipt, Expense, Traveller, Trip, Account, ExpenseCategory } from '../types'
 
 type Tab = 'invoices' | 'receipts' | 'expenses'
@@ -56,13 +56,15 @@ function InvoicesTab() {
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Invoice>>({ currency: 'BHD', status: 'unpaid', issue_date: today() })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [travellerSearch, setTravellerSearch] = useState('')
 
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
     queryFn: async () => {
       const { data } = await supabase
         .from('invoices')
-        .select('*, traveller:travellers(full_name_ar, package_type), trip:trips(trip_name), account:accounts(name)')
+        .select('*, traveller:travellers(full_name_ar, cpr_number, package_type), trip:trips(trip_name), account:accounts(name)')
         .order('issue_date', { ascending: false })
       return (data ?? []) as any[]
     },
@@ -73,13 +75,13 @@ function InvoicesTab() {
   const { data: accounts = [] }   = useQuery({ queryKey: ['accounts-list'],   queryFn: fetchAccounts })
 
   const save = useMutation({
-    mutationFn: async (inv: Partial<Invoice>) => {
-      if (editingId) {
-        await supabase.from('invoices').update(inv).eq('id', editingId).throwOnError()
+    mutationFn: async ({ data, editId }: { data: Partial<Invoice>; editId: string | null }) => {
+      if (editId) {
+        await supabase.from('invoices').update(data).eq('id', editId).throwOnError()
         return
       }
       const num = await nextNumber('invoices', 'invoice_number', 'INV')
-      await supabase.from('invoices').insert({ ...inv, invoice_number: num }).throwOnError()
+      await supabase.from('invoices').insert({ ...data, invoice_number: num }).throwOnError()
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
@@ -99,6 +101,18 @@ function InvoicesTab() {
   const totalUnpaid = invoices.filter(i => i.status !== 'paid').reduce((s: number, i: any) => s + (i.amount - i.amount_paid), 0)
   const selectedCurrency = (sel.currency ?? 'BHD') as Currency
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
+  const searchTerm = search.trim().toLowerCase()
+  const filteredInvoices = searchTerm
+    ? invoices.filter((i: any) =>
+      (i.traveller?.full_name_ar ?? '').toLowerCase().includes(searchTerm) ||
+      (i.traveller?.cpr_number ?? '').toLowerCase().includes(searchTerm))
+    : invoices
+  const travellerSearchTerm = travellerSearch.trim().toLowerCase()
+  const matchingTravellers = travellerSearchTerm
+    ? travellers.filter((t: any) =>
+      (t.full_name_ar ?? '').toLowerCase().includes(travellerSearchTerm) ||
+      (t.cpr_number ?? '').toLowerCase().includes(travellerSearchTerm))
+    : travellers
   const printInvoice = (inv: any) => {
     const amount = Number(inv.amount ?? 0)
     const amountPaid = Number(inv.amount_paid ?? 0)
@@ -130,9 +144,19 @@ function InvoicesTab() {
         </button>
       </div>
 
+      <div className="relative">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+        <input
+          className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
       <AccountingTable
         columns={['رقم الفاتورة', 'الحاج', 'الرحلة', 'الحساب', 'المبلغ', 'المدفوع', 'الحالة']}
-        rows={invoices.map((i: any) => [
+        rows={filteredInvoices.map((i: any) => [
           i.invoice_number ?? '—',
           i.traveller?.full_name_ar ?? '—',
           i.trip?.trip_name ?? '—',
@@ -142,7 +166,7 @@ function InvoicesTab() {
           <StatusBadge status={i.status} />,
         ])}
         onEdit={id => {
-          const inv = invoices[id]
+          const inv = filteredInvoices[id]
           setEditingId(inv.id)
           setSel({
             traveller_id: inv.traveller_id ?? '',
@@ -157,17 +181,41 @@ function InvoicesTab() {
             issue_date: inv.issue_date ?? today(),
             amount_paid: Number(inv.amount_paid ?? 0),
           })
+          setTravellerSearch(inv.traveller?.full_name_ar ?? '')
           setModal(true)
         }}
-        onPrint={id => printInvoice(invoices[id])}
-        onDelete={id => window.confirm('حذف الفاتورة؟') && del.mutate(invoices[id].id)}
+        onPrint={id => printInvoice(filteredInvoices[id])}
+        onDelete={id => window.confirm('حذف الفاتورة؟') && del.mutate(filteredInvoices[id].id)}
       />
 
       {modal && (
-        <Modal title={editingId ? 'تعديل الفاتورة' : 'فاتورة جديدة'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate(sel)} saving={save.isPending}>
-          <Select label="الحاج" value={sel.traveller_id ?? ''}
-            onChange={v => setSel(s => ({ ...s, traveller_id: v }))}
-            options={travellers.map((t: Traveller) => ({ value: t.id, label: t.full_name_ar }))} />
+        <Modal title={editingId ? 'تعديل الفاتورة' : 'فاتورة جديدة'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate({ data: sel, editId: editingId })} saving={save.isPending}>
+          <div className="relative">
+            <label className="block text-xs font-medium text-gray-600 mb-1">الحاج</label>
+            <input
+              className={ic}
+              value={travellerSearch}
+              onChange={e => { setTravellerSearch(e.target.value); setSel(s => ({ ...s, traveller_id: '' })) }}
+              placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+            />
+            {travellerSearch.trim() && (
+              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
+                {matchingTravellers.map((t: any) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setSel(s => ({ ...s, traveller_id: t.id }))
+                      setTravellerSearch(`${t.full_name_ar} — ${t.cpr_number ?? '—'}`)
+                    }}
+                    className="w-full text-right px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    {t.full_name_ar} <span className="text-gray-400 text-xs">({t.cpr_number ?? '—'})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Select label="الرحلة" value={sel.trip_id ?? ''}
             onChange={v => setSel(s => ({ ...s, trip_id: v }))}
             options={trips.map((t: Trip) => ({ value: t.id, label: t.trip_name }))} />
@@ -197,13 +245,15 @@ function ReceiptsTab() {
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Receipt>>({ currency: 'BHD', payment_method: 'cash', payment_date: today() })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [travellerSearch, setTravellerSearch] = useState('')
 
   const { data: receipts = [] } = useQuery({
     queryKey: ['receipts'],
     queryFn: async () => {
       const { data } = await supabase
         .from('receipts')
-        .select('*, traveller:travellers(full_name_ar, package_type), invoice:invoices(invoice_number), account:accounts(name)')
+        .select('*, traveller:travellers(full_name_ar, cpr_number, package_type), invoice:invoices(invoice_number), account:accounts(name)')
         .order('payment_date', { ascending: false })
       return (data ?? []) as any[]
     },
@@ -217,25 +267,37 @@ function ReceiptsTab() {
   const { data: accounts = [] }   = useQuery({ queryKey: ['accounts-list'], queryFn: fetchAccounts })
   const selectedCurrency = (sel.currency ?? 'BHD') as Currency
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
+  const searchTerm = search.trim().toLowerCase()
+  const filteredReceipts = searchTerm
+    ? receipts.filter((r: any) =>
+      (r.traveller?.full_name_ar ?? '').toLowerCase().includes(searchTerm) ||
+      (r.traveller?.cpr_number ?? '').toLowerCase().includes(searchTerm))
+    : receipts
+  const travellerSearchTerm = travellerSearch.trim().toLowerCase()
+  const matchingTravellers = travellerSearchTerm
+    ? travellers.filter((t: any) =>
+      (t.full_name_ar ?? '').toLowerCase().includes(travellerSearchTerm) ||
+      (t.cpr_number ?? '').toLowerCase().includes(travellerSearchTerm))
+    : travellers
 
   const save = useMutation({
-    mutationFn: async (r: Partial<Receipt>) => {
-      if (editingId) {
+    mutationFn: async ({ data, editId }: { data: Partial<Receipt>; editId: string | null }) => {
+      if (editId) {
         await supabase.from('receipts').update({
-          ...r,
-          traveller_id: r.traveller_id || null,
-          invoice_id: r.invoice_id || null,
-          account_id: r.account_id || null,
-        }).eq('id', editingId).throwOnError()
+          ...data,
+          traveller_id: data.traveller_id || null,
+          invoice_id: data.invoice_id || null,
+          account_id: data.account_id || null,
+        }).eq('id', editId).throwOnError()
         return
       }
       const num = await nextNumber('receipts', 'receipt_number', 'RCP')
       await supabase.from('receipts').insert({ 
-        ...r, 
+        ...data, 
         receipt_number: num,
-        traveller_id: r.traveller_id || null,
-        invoice_id:   r.invoice_id   || null,
-        account_id:   r.account_id   || null,
+        traveller_id: data.traveller_id || null,
+        invoice_id:   data.invoice_id   || null,
+        account_id:   data.account_id   || null,
       }).throwOnError()
     },
     onSuccess: () => {
@@ -276,9 +338,19 @@ function ReceiptsTab() {
         </button>
       </div>
 
+      <div className="relative">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+        <input
+          className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
       <AccountingTable
         columns={['رقم الإيصال', 'الحاج', 'الفاتورة', 'الحساب', 'المبلغ', 'طريقة الدفع', 'التاريخ']}
-        rows={receipts.map((r: any) => [
+        rows={filteredReceipts.map((r: any) => [
           r.receipt_number ?? '—',
           r.traveller?.full_name_ar ?? '—',
           r.invoice?.invoice_number ?? '—',
@@ -288,7 +360,7 @@ function ReceiptsTab() {
           r.payment_date,
         ])}
         onEdit={id => {
-          const r = receipts[id]
+          const r = filteredReceipts[id]
           setEditingId(r.id)
           setSel({
             traveller_id: r.traveller_id ?? '',
@@ -300,17 +372,41 @@ function ReceiptsTab() {
             payment_date: r.payment_date ?? today(),
             notes: r.notes ?? '',
           })
+          setTravellerSearch(r.traveller?.full_name_ar ?? '')
           setModal(true)
         }}
-        onPrint={id => printReceipt(receipts[id])}
-        onDelete={id => window.confirm('حذف الإيصال؟') && del.mutate(receipts[id].id)}
+        onPrint={id => printReceipt(filteredReceipts[id])}
+        onDelete={id => window.confirm('حذف الإيصال؟') && del.mutate(filteredReceipts[id].id)}
       />
 
       {modal && (
-        <Modal title={editingId ? 'تعديل الإيصال' : 'إيصال دفع جديد'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate(sel)} saving={save.isPending}>
-          <Select label="الحاج" value={sel.traveller_id ?? ''}
-            onChange={v => setSel(s => ({ ...s, traveller_id: v }))}
-            options={travellers.map((t: Traveller) => ({ value: t.id, label: t.full_name_ar }))} />
+        <Modal title={editingId ? 'تعديل الإيصال' : 'إيصال دفع جديد'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate({ data: sel, editId: editingId })} saving={save.isPending}>
+          <div className="relative">
+            <label className="block text-xs font-medium text-gray-600 mb-1">الحاج</label>
+            <input
+              className={ic}
+              value={travellerSearch}
+              onChange={e => { setTravellerSearch(e.target.value); setSel(s => ({ ...s, traveller_id: '' })) }}
+              placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+            />
+            {travellerSearch.trim() && (
+              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
+                {matchingTravellers.map((t: any) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setSel(s => ({ ...s, traveller_id: t.id }))
+                      setTravellerSearch(`${t.full_name_ar} — ${t.cpr_number ?? '—'}`)
+                    }}
+                    className="w-full text-right px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    {t.full_name_ar} <span className="text-gray-400 text-xs">({t.cpr_number ?? '—'})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Select label="الفاتورة" value={sel.invoice_id ?? ''}
             onChange={v => setSel(s => ({ ...s, invoice_id: v }))}
             options={invoices.map((i: any) => ({ value: i.id, label: i.invoice_number }))} />
@@ -341,13 +437,15 @@ function ExpensesTab() {
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Expense>>({ currency: 'BHD', expense_date: today() })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [travellerSearch, setTravellerSearch] = useState('')
 
   const { data: expenses = [] } = useQuery({
     queryKey: ['expenses'],
     queryFn: async () => {
       const { data } = await supabase
         .from('expenses')
-        .select('*, account:accounts(name), trip:trips(trip_name), traveller:travellers(package_type)')
+        .select('*, account:accounts(name), trip:trips(trip_name), traveller:travellers(full_name_ar, cpr_number, package_type)')
         .order('expense_date', { ascending: false })
       return (data ?? []) as any[]
     },
@@ -355,17 +453,30 @@ function ExpensesTab() {
 
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts-list'], queryFn: fetchAccounts })
   const { data: trips = [] }    = useQuery({ queryKey: ['trips-list'],    queryFn: fetchTrips })
+  const { data: travellers = [] } = useQuery({ queryKey: ['travellers-list'], queryFn: fetchTravellers })
   const selectedCurrency = (sel.currency ?? 'BHD') as Currency
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
+  const searchTerm = search.trim().toLowerCase()
+  const filteredExpenses = searchTerm
+    ? expenses.filter((e: any) =>
+      (e.traveller?.full_name_ar ?? '').toLowerCase().includes(searchTerm) ||
+      (e.traveller?.cpr_number ?? '').toLowerCase().includes(searchTerm))
+    : expenses
+  const travellerSearchTerm = travellerSearch.trim().toLowerCase()
+  const matchingTravellers = travellerSearchTerm
+    ? travellers.filter((t: any) =>
+      (t.full_name_ar ?? '').toLowerCase().includes(travellerSearchTerm) ||
+      (t.cpr_number ?? '').toLowerCase().includes(travellerSearchTerm))
+    : travellers
 
   const save = useMutation({
-    mutationFn: async (e: Partial<Expense>) => {
-      if (editingId) {
-        await supabase.from('expenses').update(e).eq('id', editingId).throwOnError()
+    mutationFn: async ({ data, editId }: { data: Partial<Expense>; editId: string | null }) => {
+      if (editId) {
+        await supabase.from('expenses').update(data).eq('id', editId).throwOnError()
         return
       }
       const num = await nextNumber('expenses', 'expense_number', 'EXP')
-      await supabase.from('expenses').insert({ ...e, expense_number: num }).throwOnError()
+      await supabase.from('expenses').insert({ ...data, expense_number: num }).throwOnError()
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses', 'accounts-list'] })
@@ -407,9 +518,19 @@ function ExpensesTab() {
         </button>
       </div>
 
+      <div className="relative">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+        <input
+          className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
       <AccountingTable
         columns={['رقم المصروف', 'الوصف', 'الحساب', 'الرحلة', 'الفئة', 'المبلغ', 'التاريخ']}
-        rows={expenses.map((e: any) => [
+        rows={filteredExpenses.map((e: any) => [
           e.expense_number ?? '—',
           e.description,
           e.account?.name ?? '—',
@@ -419,7 +540,7 @@ function ExpensesTab() {
           e.expense_date,
         ])}
         onEdit={id => {
-          const e = expenses[id]
+          const e = filteredExpenses[id]
           setEditingId(e.id)
           setSel({
             description: e.description ?? '',
@@ -430,17 +551,52 @@ function ExpensesTab() {
             category: e.category ?? '',
             expense_date: e.expense_date ?? today(),
             notes: e.notes ?? '',
+            traveller_id: e.traveller_id ?? '',
           })
+          setTravellerSearch(e.traveller?.full_name_ar ?? '')
           setModal(true)
         }}
-        onPrint={id => printExpense(expenses[id])}
-        onDelete={id => window.confirm('حذف المصروف؟') && del.mutate(expenses[id].id)}
+        onPrint={id => printExpense(filteredExpenses[id])}
+        onDelete={id => window.confirm('حذف المصروف؟') && del.mutate(filteredExpenses[id].id)}
       />
 
       {modal && (
-        <Modal title={editingId ? 'تعديل المصروف' : 'مصروف جديد'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate(sel)} saving={save.isPending}>
+        <Modal title={editingId ? 'تعديل المصروف' : 'مصروف جديد'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate({ data: sel, editId: editingId })} saving={save.isPending}>
           <Input label="الوصف *" value={sel.description ?? ''}
             onChange={v => setSel(s => ({ ...s, description: v }))} />
+          <div className="relative">
+            <label className="block text-xs font-medium text-gray-600 mb-1">الحاج (اختياري)</label>
+            <input
+              className={ic}
+              value={travellerSearch}
+              onChange={e => { setTravellerSearch(e.target.value); setSel(s => ({ ...s, traveller_id: '' })) }}
+              placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+            />
+            {travellerSearch.trim() && (
+              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
+                <button
+                  type="button"
+                  onClick={() => { setSel(s => ({ ...s, traveller_id: null })); setTravellerSearch('') }}
+                  className="w-full text-right px-3 py-2 text-sm hover:bg-gray-50 text-gray-500"
+                >
+                  — بدون حاج —
+                </button>
+                {matchingTravellers.map((t: any) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setSel(s => ({ ...s, traveller_id: t.id }))
+                      setTravellerSearch(`${t.full_name_ar} — ${t.cpr_number ?? '—'}`)
+                    }}
+                    className="w-full text-right px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    {t.full_name_ar} <span className="text-gray-400 text-xs">({t.cpr_number ?? '—'})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Select label="العملة *" value={selectedCurrency}
             onChange={v => setSel(s => ({ ...s, currency: v as Currency, account_id: '' }))}
             options={[{ value: 'BHD', label: 'BHD' }, { value: 'SAR', label: 'SAR' }]} />
@@ -532,7 +688,7 @@ function openPrintWindow({ docType, rows }: { docType: string; rows: [string, st
 }
 
 async function fetchTravellers() {
-  const { data } = await supabase.from('travellers').select('id, full_name_ar').order('full_name_ar')
+  const { data } = await supabase.from('travellers').select('id, full_name_ar, cpr_number').order('full_name_ar')
   return (data ?? []) as Traveller[]
 }
 async function fetchTrips() {
