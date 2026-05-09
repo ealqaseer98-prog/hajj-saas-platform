@@ -244,7 +244,7 @@ function ReceiptsTab() {
   const qc = useQueryClient()
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Receipt>>({ currency: 'BHD', payment_method: 'cash', payment_date: today() })
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingReceipt, setEditingReceipt] = useState<any | null>(null)
   const [search, setSearch] = useState('')
   const [travellerSearch, setTravellerSearch] = useState('')
 
@@ -281,14 +281,14 @@ function ReceiptsTab() {
     : travellers
 
   const save = useMutation({
-    mutationFn: async ({ data, editId }: { data: Partial<Receipt>; editId: string | null }) => {
-      if (editId) {
+    mutationFn: async ({ data, receipt }: { data: Partial<Receipt>; receipt: any | null }) => {
+      if (receipt?.id) {
         await supabase.from('receipts').update({
           ...data,
           traveller_id: data.traveller_id || null,
           invoice_id: data.invoice_id || null,
           account_id: data.account_id || null,
-        }).eq('id', editId).throwOnError()
+        }).eq('id', receipt.id).throwOnError()
         return
       }
       const num = await nextNumber('receipts', 'receipt_number', 'RCP')
@@ -303,7 +303,7 @@ function ReceiptsTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['receipts', 'invoices', 'accounts-list'] })
       setModal(false)
-      setEditingId(null)
+      setEditingReceipt(null)
       setSel({ currency: 'BHD', payment_method: 'cash', payment_date: today() })
     },
   })
@@ -332,7 +332,7 @@ function ReceiptsTab() {
   return (
     <>
       <div className="flex justify-end">
-        <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', payment_method: 'cash', payment_date: today() }); setModal(true) }}
+        <button onClick={() => { setEditingReceipt(null); setSel({ currency: 'BHD', payment_method: 'cash', payment_date: today() }); setModal(true) }}
           className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <Plus size={15} /> إيصال دفع جديد
         </button>
@@ -361,7 +361,7 @@ function ReceiptsTab() {
         ])}
         onEdit={id => {
           const r = filteredReceipts[id]
-          setEditingId(r.id)
+          setEditingReceipt(r)
           setSel({
             traveller_id: r.traveller_id ?? '',
             invoice_id: r.invoice_id ?? '',
@@ -380,7 +380,7 @@ function ReceiptsTab() {
       />
 
       {modal && (
-        <Modal title={editingId ? 'تعديل الإيصال' : 'إيصال دفع جديد'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate({ data: sel, editId: editingId })} saving={save.isPending}>
+        <Modal title={editingReceipt ? 'تعديل الإيصال' : 'إيصال دفع جديد'} onClose={() => { setModal(false); setEditingReceipt(null) }} onSave={() => save.mutate({ data: sel, receipt: editingReceipt })} saving={save.isPending}>
           <div className="relative">
             <label className="block text-xs font-medium text-gray-600 mb-1">الحاج</label>
             <input
