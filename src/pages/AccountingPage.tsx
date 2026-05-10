@@ -808,8 +808,8 @@ async function fetchAccounts() {
 }
 
 async function nextNumber(table: string, column: string, prefix: string): Promise<string> {
-  const year = new Date().getFullYear()
-  const fullPrefix = `${prefix}-${year}-`
+  const hijriYear = '1447'
+  const fullPrefix = `${prefix}-${hijriYear}-`
   const { data } = await supabase
     .from(table)
     .select(column)
