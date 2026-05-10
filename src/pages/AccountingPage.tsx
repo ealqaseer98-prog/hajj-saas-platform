@@ -8,6 +8,19 @@ import type { Invoice, Receipt, Expense, Traveller, Trip, Account, ExpenseCatego
 
 type Tab = 'invoices' | 'receipts' | 'expenses'
 type Currency = 'BHD' | 'SAR'
+
+function formatCurrencyAmount(n: number, currency: Currency | string | undefined): string {
+  const c = currency ?? 'BHD'
+  if (c === 'SAR') {
+    return n.toLocaleString('ar-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  }
+  return n.toLocaleString('ar-BH', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+}
+
+function formatBhdAmount(n: number): string {
+  return n.toLocaleString('ar-BH', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+}
+
 const COMPANY_TITLE = 'حملة العمار للحج والعمرة'
 const COMPANY_LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 const PACKAGE_TYPE_LABELS: Record<string, string> = {
@@ -135,9 +148,9 @@ function InvoicesTab() {
         ['رقم الفاتورة', inv.invoice_number ?? '—'],
         ['اسم الحاج', inv.traveller?.full_name_ar ?? '—'],
         ['الباقة', inv.traveller?.package_type ? (PACKAGE_TYPE_LABELS[inv.traveller.package_type] ?? inv.traveller.package_type) : '—'],
-        ['المبلغ', `${amount.toFixed(3)} ${inv.currency ?? 'BHD'}`],
-        ['المدفوع', `${amountPaid.toFixed(3)} ${inv.currency ?? 'BHD'}`],
-        ['المتبقي', `${remaining.toFixed(3)} ${inv.currency ?? 'BHD'}`],
+        ['المبلغ', `${formatCurrencyAmount(amount, inv.currency)} ${inv.currency ?? 'BHD'}`],
+        ['المدفوع', `${formatCurrencyAmount(amountPaid, inv.currency)} ${inv.currency ?? 'BHD'}`],
+        ['المتبقي', `${formatCurrencyAmount(remaining, inv.currency)} ${inv.currency ?? 'BHD'}`],
         ['الوصف', inv.description ?? '—'],
         ['تاريخ الإصدار', inv.issue_date ?? '—'],
         ['تاريخ الاستحقاق', inv.due_date ?? '—'],
@@ -149,7 +162,7 @@ function InvoicesTab() {
   return (
     <>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-red-600 font-medium">المستحق: {totalUnpaid.toFixed(3)} BHD</p>
+        <p className="text-sm text-red-600 font-medium">المستحق: {formatBhdAmount(totalUnpaid)} BHD</p>
         <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', status: 'unpaid', issue_date: today() }); setModal(true) }}
           className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <Plus size={15} /> فاتورة جديدة
@@ -173,8 +186,8 @@ function InvoicesTab() {
           i.traveller?.full_name_ar ?? '—',
           i.trip?.trip_name ?? '—',
           i.account?.name ?? '—',
-          `${Number(i.amount).toFixed(3)} ${i.currency ?? 'BHD'}`,
-          `${Number(i.amount_paid).toFixed(3)} ${i.currency ?? 'BHD'}`,
+          `${formatCurrencyAmount(Number(i.amount), i.currency)} ${i.currency ?? 'BHD'}`,
+          `${formatCurrencyAmount(Number(i.amount_paid), i.currency)} ${i.currency ?? 'BHD'}`,
           <StatusBadge status={i.status} />,
         ])}
         onView={id => setViewingInvoice(filteredInvoices[id])}
@@ -208,9 +221,9 @@ function InvoicesTab() {
           <DetailRow label="رقم البطاقة" value={viewingInvoice.traveller?.cpr_number ?? '—'} />
           <DetailRow label="الباقة" value={viewingInvoice.traveller?.package_type ? (PACKAGE_TYPE_LABELS[viewingInvoice.traveller.package_type] ?? viewingInvoice.traveller.package_type) : '—'} />
           <DetailRow label="الوصف" value={viewingInvoice.description ?? '—'} />
-          <DetailRow label="المبلغ" value={`${Number(viewingInvoice.amount ?? 0).toFixed(3)} ${viewingInvoice.currency ?? 'BHD'}`} />
-          <DetailRow label="المدفوع" value={`${Number(viewingInvoice.amount_paid ?? 0).toFixed(3)} ${viewingInvoice.currency ?? 'BHD'}`} />
-          <DetailRow label="المتبقي" value={`${(Number(viewingInvoice.amount ?? 0) - Number(viewingInvoice.amount_paid ?? 0)).toFixed(3)} ${viewingInvoice.currency ?? 'BHD'}`} />
+          <DetailRow label="المبلغ" value={`${formatCurrencyAmount(Number(viewingInvoice.amount ?? 0), viewingInvoice.currency)} ${viewingInvoice.currency ?? 'BHD'}`} />
+          <DetailRow label="المدفوع" value={`${formatCurrencyAmount(Number(viewingInvoice.amount_paid ?? 0), viewingInvoice.currency)} ${viewingInvoice.currency ?? 'BHD'}`} />
+          <DetailRow label="المتبقي" value={`${formatCurrencyAmount(Number(viewingInvoice.amount ?? 0) - Number(viewingInvoice.amount_paid ?? 0), viewingInvoice.currency)} ${viewingInvoice.currency ?? 'BHD'}`} />
           <DetailRow label="الحالة" value={STATUS_TEXT[viewingInvoice.status as string] ?? viewingInvoice.status ?? '—'} />
           <DetailRow label="تاريخ الإصدار" value={viewingInvoice.issue_date ?? '—'} />
           <DetailRow label="تاريخ الاستحقاق" value={viewingInvoice.due_date ?? '—'} />
@@ -358,7 +371,7 @@ function ReceiptsTab() {
         ['اسم الحاج', rcp.traveller?.full_name_ar ?? '—'],
         ['الباقة', rcp.traveller?.package_type ? (PACKAGE_TYPE_LABELS[rcp.traveller.package_type] ?? rcp.traveller.package_type) : '—'],
         ['رقم الفاتورة', rcp.invoice?.invoice_number ?? '—'],
-        ['المبلغ', `${Number(rcp.amount ?? 0).toFixed(3)} ${rcp.currency ?? 'BHD'}`],
+        ['المبلغ', `${formatCurrencyAmount(Number(rcp.amount ?? 0), rcp.currency)} ${rcp.currency ?? 'BHD'}`],
         ['طريقة الدفع', PAYMENT_LABELS[rcp.payment_method as string] ?? rcp.payment_method ?? '—'],
         ['تاريخ الدفع', rcp.payment_date ?? '—'],
       ],
@@ -391,7 +404,7 @@ function ReceiptsTab() {
           r.traveller?.full_name_ar ?? '—',
           r.invoice?.invoice_number ?? '—',
           r.account?.name ?? '—',
-          `${Number(r.amount).toFixed(3)} ${r.currency ?? 'BHD'}`,
+          `${formatCurrencyAmount(Number(r.amount), r.currency)} ${r.currency ?? 'BHD'}`,
           PAYMENT_LABELS[r.payment_method as string] ?? r.payment_method,
           r.payment_date,
         ])}
@@ -422,7 +435,7 @@ function ReceiptsTab() {
           <DetailRow label="اسم الحاج" value={viewingReceipt.traveller?.full_name_ar ?? '—'} />
           <DetailRow label="رقم البطاقة" value={viewingReceipt.traveller?.cpr_number ?? '—'} />
           <DetailRow label="رقم الفاتورة المرتبط" value={viewingReceipt.invoice?.invoice_number ?? '—'} />
-          <DetailRow label="المبلغ" value={`${Number(viewingReceipt.amount ?? 0).toFixed(3)} ${viewingReceipt.currency ?? 'BHD'}`} />
+          <DetailRow label="المبلغ" value={`${formatCurrencyAmount(Number(viewingReceipt.amount ?? 0), viewingReceipt.currency)} ${viewingReceipt.currency ?? 'BHD'}`} />
           <DetailRow label="طريقة الدفع" value={PAYMENT_LABELS[viewingReceipt.payment_method as string] ?? viewingReceipt.payment_method ?? '—'} />
           <DetailRow label="تاريخ الدفع" value={viewingReceipt.payment_date ?? '—'} />
           <DetailRow label="ملاحظات" value={viewingReceipt.notes ?? '—'} />
@@ -552,7 +565,7 @@ function ExpensesTab() {
         ['الوصف', exp.description ?? '—'],
         ['الباقة', exp.traveller?.package_type ? (PACKAGE_TYPE_LABELS[exp.traveller.package_type] ?? exp.traveller.package_type) : '—'],
         ['الفئة', CATEGORY_LABELS[exp.category as string] ?? exp.category ?? '—'],
-        ['المبلغ', `${Number(exp.amount ?? 0).toFixed(3)} ${exp.currency ?? 'BHD'}`],
+        ['المبلغ', `${formatCurrencyAmount(Number(exp.amount ?? 0), exp.currency)} ${exp.currency ?? 'BHD'}`],
         ['تاريخ المصروف', exp.expense_date ?? '—'],
       ],
     })
@@ -561,7 +574,7 @@ function ExpensesTab() {
   return (
     <>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-red-600 font-medium">إجمالي المصروفات: {totalExpenses.toFixed(3)} BHD</p>
+        <p className="text-sm text-red-600 font-medium">إجمالي المصروفات: {formatBhdAmount(totalExpenses)} BHD</p>
         <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', expense_date: today() }); setModal(true) }}
           className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <Plus size={15} /> مصروف جديد
@@ -586,7 +599,7 @@ function ExpensesTab() {
           e.account?.name ?? '—',
           e.trip?.trip_name ?? '—',
           CATEGORY_LABELS[e.category as string] ?? e.category ?? '—',
-          `${Number(e.amount).toFixed(3)} BHD`,
+          `${formatCurrencyAmount(Number(e.amount), e.currency)} ${e.currency ?? 'BHD'}`,
           e.expense_date,
         ])}
         onEdit={id => {
