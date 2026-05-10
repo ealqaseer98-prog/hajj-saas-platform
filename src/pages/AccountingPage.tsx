@@ -78,7 +78,15 @@ function InvoicesTab() {
   const save = useMutation({
     mutationFn: async ({ data, editId }: { data: Partial<Invoice>; editId: string | null }) => {
       if (editId) {
-        await supabase.from('invoices').update(data).eq('id', editId).throwOnError()
+        await supabase
+          .from('invoices')
+          .update({
+            ...data,
+            due_date: data.due_date || null,
+            issue_date: data.issue_date || null,
+          })
+          .eq('id', editId)
+          .throwOnError()
         return
       }
       const num = await nextNumber('invoices', 'invoice_number', 'INV')
