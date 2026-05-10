@@ -106,7 +106,13 @@ function InvoicesTab() {
         return
       }
       const num = await nextNumber('invoices', 'invoice_number', 'INV')
-      await supabase.from('invoices').insert({ ...data, invoice_number: num }).throwOnError()
+      await supabase.from('invoices').insert({
+        ...data,
+        invoice_number: num,
+        traveller_id: data.traveller_id || null,
+        trip_id: data.trip_id || null,
+        account_id: data.account_id || null,
+      }).throwOnError()
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices'] })
