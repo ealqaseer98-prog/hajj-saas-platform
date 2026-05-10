@@ -82,6 +82,9 @@ function InvoicesTab() {
           .from('invoices')
           .update({
             ...data,
+            traveller_id: data.traveller_id || null,
+            trip_id: data.trip_id || null,
+            account_id: data.account_id || null,
             due_date: data.due_date || null,
             issue_date: data.issue_date || null,
           })
