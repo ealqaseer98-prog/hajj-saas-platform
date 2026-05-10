@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search, Eye } from 'lucide-react'
+import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search, Eye, RefreshCw } from 'lucide-react'
 import type { Invoice, Receipt, Expense, Traveller, Trip, Account, ExpenseCategory } from '../types'
 
 type Tab = 'invoices' | 'receipts' | 'expenses'
@@ -161,12 +161,22 @@ function InvoicesTab() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-red-600 font-medium">المستحق: {formatBhdAmount(totalUnpaid)} BHD</p>
-        <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', status: 'unpaid', issue_date: today() }); setModal(true) }}
-          className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          <Plus size={15} /> فاتورة جديدة
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="تحديث القائمة"
+            onClick={() => qc.invalidateQueries({ queryKey: ['invoices'] })}
+            className="flex items-center justify-center p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+          >
+            <RefreshCw size={16} />
+          </button>
+          <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', status: 'unpaid', issue_date: today() }); setModal(true) }}
+            className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            <Plus size={15} /> فاتورة جديدة
+          </button>
+        </div>
       </div>
 
       <div className="relative">
@@ -380,7 +390,15 @@ function ReceiptsTab() {
 
   return (
     <>
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          title="تحديث القائمة"
+          onClick={() => qc.invalidateQueries({ queryKey: ['receipts'] })}
+          className="flex items-center justify-center p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+        >
+          <RefreshCw size={16} />
+        </button>
         <button onClick={() => { setEditingReceipt(null); setSel({ currency: 'BHD', payment_method: 'cash', payment_date: today() }); setModal(true) }}
           className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <Plus size={15} /> إيصال دفع جديد
@@ -500,6 +518,7 @@ function ExpensesTab() {
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Expense>>({ currency: 'BHD', expense_date: today() })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [viewingExpense, setViewingExpense] = useState<any | null>(null)
   const [search, setSearch] = useState('')
   const [travellerSearch, setTravellerSearch] = useState('')
 
@@ -573,12 +592,22 @@ function ExpensesTab() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-red-600 font-medium">إجمالي المصروفات: {formatBhdAmount(totalExpenses)} BHD</p>
-        <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', expense_date: today() }); setModal(true) }}
-          className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          <Plus size={15} /> مصروف جديد
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="تحديث القائمة"
+            onClick={() => qc.invalidateQueries({ queryKey: ['expenses'] })}
+            className="flex items-center justify-center p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+          >
+            <RefreshCw size={16} />
+          </button>
+          <button onClick={() => { setEditingId(null); setSel({ currency: 'BHD', expense_date: today() }); setModal(true) }}
+            className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            <Plus size={15} /> مصروف جديد
+          </button>
+        </div>
       </div>
 
       <div className="relative">
@@ -619,9 +648,24 @@ function ExpensesTab() {
           setTravellerSearch(e.traveller?.full_name_ar ?? '')
           setModal(true)
         }}
+        onView={id => setViewingExpense(filteredExpenses[id])}
         onPrint={id => printExpense(filteredExpenses[id])}
         onDelete={id => window.confirm('حذف المصروف؟') && del.mutate(filteredExpenses[id].id)}
       />
+
+      {viewingExpense && (
+        <ViewDetailsModal title="تفاصيل المصروف" onClose={() => setViewingExpense(null)}>
+          <DetailRow label="رقم المصروف" value={viewingExpense.expense_number ?? '—'} />
+          <DetailRow label="الوصف" value={viewingExpense.description ?? '—'} />
+          <DetailRow label="الحساب" value={viewingExpense.account?.name ?? '—'} />
+          <DetailRow label="الفئة" value={CATEGORY_LABELS[viewingExpense.category as string] ?? viewingExpense.category ?? '—'} />
+          <DetailRow label="المبلغ" value={`${formatCurrencyAmount(Number(viewingExpense.amount ?? 0), viewingExpense.currency)} ${viewingExpense.currency ?? 'BHD'}`} />
+          <DetailRow label="العملة" value={viewingExpense.currency ?? 'BHD'} />
+          <DetailRow label="تاريخ المصروف" value={viewingExpense.expense_date ?? '—'} />
+          <DetailRow label="اسم الحاج" value={viewingExpense.traveller?.full_name_ar ?? '—'} />
+          <DetailRow label="ملاحظات" value={viewingExpense.notes ?? '—'} />
+        </ViewDetailsModal>
+      )}
 
       {modal && (
         <Modal title={editingId ? 'تعديل المصروف' : 'مصروف جديد'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate({ data: sel, editId: editingId })} saving={save.isPending}>
