@@ -12,13 +12,13 @@ type Currency = 'BHD' | 'SAR'
 function formatCurrencyAmount(n: number, currency: Currency | string | undefined): string {
   const c = currency ?? 'BHD'
   if (c === 'SAR') {
-    return n.toLocaleString('ar-SA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    return Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
-  return n.toLocaleString('ar-BH', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
 
 function formatBhdAmount(n: number): string {
-  return n.toLocaleString('ar-BH', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
 
 const COMPANY_TITLE = 'حملة العمار للحج والعمرة'

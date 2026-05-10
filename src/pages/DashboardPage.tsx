@@ -6,6 +6,14 @@ import { supabase } from '../lib/supabase'
 import { Users, Plane, Wallet, AlertCircle, FileWarning, Bell, CheckCircle2, Clock } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 
+function formatMoney(value: number, currency: string | undefined) {
+  const c = currency ?? 'BHD'
+  if (c === 'SAR') {
+    return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  }
+  return Number(value).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+}
+
 export default function DashboardPage() {
   const { user }  = useAuthStore()
   const navigate  = useNavigate()
@@ -67,7 +75,7 @@ export default function DashboardPage() {
       const today = new Date().toISOString().slice(0, 10)
       const { data } = await supabase
         .from('invoices')
-        .select('id, invoice_number, due_date, amount, amount_paid, traveller:travellers(full_name_ar, phone)')
+        .select('id, invoice_number, due_date, amount, amount_paid, currency, traveller:travellers(full_name_ar, phone)')
         .lt('due_date', today)
         .in('status', ['unpaid', 'partial'])
         .order('due_date')
@@ -84,7 +92,7 @@ export default function DashboardPage() {
       const in7days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
       const { data } = await supabase
         .from('invoices')
-        .select('id, invoice_number, due_date, amount, amount_paid, traveller:travellers(full_name_ar, phone)')
+        .select('id, invoice_number, due_date, amount, amount_paid, currency, traveller:travellers(full_name_ar, phone)')
         .gte('due_date', today)
         .lte('due_date', in7days)
         .in('status', ['unpaid', 'partial'])
@@ -213,8 +221,8 @@ export default function DashboardPage() {
           { label: 'تصاريح البحرين',   value: stats?.bahrainTasreeh ?? 0, icon: CheckCircle2, color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/travellers' },
           { label: 'تصاريح السعودية',  value: stats?.saudiTasreeh ?? 0,   icon: CheckCircle2, color: 'text-green-600',   bg: 'bg-green-50',   link: '/travellers' },
           { label: 'رحلات قادمة',       value: stats?.upcomingTrips ?? 0, icon: Plane,         color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/trips' },
-          { label: 'رصيد الحسابات',    value: `${(stats?.totalBalance ?? 0).toFixed(3)} BHD`, icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/accounts' },
-          { label: 'المبالغ المستحقة', value: `${(stats?.outstanding ?? 0).toFixed(3)} BHD`,  icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', link: '/accounting' },
+          { label: 'رصيد الحسابات',    value: `${formatMoney(stats?.totalBalance ?? 0, 'BHD')} BHD`, icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/accounts' },
+          { label: 'المبالغ المستحقة', value: `${formatMoney(stats?.outstanding ?? 0, 'BHD')} BHD`,  icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', link: '/accounting' },
         ].map(card => (
           <button key={card.label} onClick={() => navigate(card.link)}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-right hover:shadow-md transition-shadow">
@@ -365,7 +373,7 @@ export default function DashboardPage() {
                   style={{ width: `${stats?.totalInvoiced ? Math.min(100, (row.value / stats.totalInvoiced) * 100) : 0}%` }} />
               </div>
               <div className="text-sm font-medium text-gray-700 w-36 text-left shrink-0">
-                {row.value.toFixed(3)} BHD
+                {formatMoney(row.value, 'BHD')} BHD
               </div>
             </div>
           ))}
@@ -430,7 +438,7 @@ export default function DashboardPage() {
             {overdueInvoices.map((inv: any) => (
               <div key={inv.id} className="flex items-center justify-between py-1.5 text-xs border-b border-gray-50 last:border-0">
                 <span className="text-red-600 font-medium">{inv.traveller?.full_name_ar ?? '—'}</span>
-                <span className="text-red-500">{(Number(inv.amount) - Number(inv.amount_paid)).toFixed(3)} BHD</span>
+                <span className="text-red-500">{formatMoney(Number(inv.amount) - Number(inv.amount_paid), inv.currency)} {inv.currency ?? 'BHD'}</span>
               </div>
             ))}
             {dueSoon.map((inv: any) => (

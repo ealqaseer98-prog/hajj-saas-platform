@@ -5,6 +5,14 @@ import { supabase } from '../lib/supabase'
 import { Plus, ArrowLeftRight, TrendingUp } from 'lucide-react'
 import type { Account } from '../types'
 
+function formatMoney(value: number, currency: string | undefined) {
+  const c = currency ?? 'BHD'
+  if (c === 'SAR') {
+    return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  }
+  return Number(value).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+}
+
 export default function AccountsPage() {
   const qc = useQueryClient()
   const [addModal, setAddModal]       = useState(false)
@@ -57,7 +65,7 @@ export default function AccountsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">الحسابات</h1>
           <p className="text-sm text-emerald-700 font-medium mt-0.5">
-            إجمالي الأرصدة: {totalBalance.toFixed(3)} BHD
+            إجمالي الأرصدة: {formatMoney(totalBalance, 'BHD')} BHD
           </p>
         </div>
         <div className="flex gap-2">
@@ -92,7 +100,7 @@ export default function AccountsPage() {
             <div>
               <p className="text-xs text-gray-400">الرصيد الحالي</p>
               <p className={`text-2xl font-bold mt-0.5 ${Number(acc.balance) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                {Number(acc.balance).toFixed(3)}
+                {formatMoney(Number(acc.balance), acc.currency)}
                 <span className="text-sm font-normal text-gray-400 mr-1">{acc.currency}</span>
               </p>
             </div>
@@ -123,7 +131,7 @@ export default function AccountsPage() {
           onSave={() => transfer.mutate()} saving={transfer.isPending}>
           <LabelSelect label="من حساب" value={xfer.from}
             onChange={v => setXfer(s => ({ ...s, from: v }))}
-            options={accounts.map(a => ({ value: a.id, label: `${a.name} (${Number(a.balance).toFixed(3)})` }))} />
+            options={accounts.map(a => ({ value: a.id, label: `${a.name} (${formatMoney(Number(a.balance), a.currency)})` }))} />
           <LabelSelect label="إلى حساب" value={xfer.to}
             onChange={v => setXfer(s => ({ ...s, to: v }))}
             options={accounts.filter(a => a.id !== xfer.from).map(a => ({ value: a.id, label: a.name }))} />
