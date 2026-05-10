@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search } from 'lucide-react'
+import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search, Eye } from 'lucide-react'
 import type { Invoice, Receipt, Expense, Traveller, Trip, Account, ExpenseCategory } from '../types'
 
 type Tab = 'invoices' | 'receipts' | 'expenses'
@@ -56,6 +56,7 @@ function InvoicesTab() {
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Invoice>>({ currency: 'BHD', status: 'unpaid', issue_date: today() })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [viewingInvoice, setViewingInvoice] = useState<any | null>(null)
   const [search, setSearch] = useState('')
   const [travellerSearch, setTravellerSearch] = useState('')
 
@@ -64,7 +65,7 @@ function InvoicesTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('invoices')
-        .select('*, traveller:travellers(full_name_ar, cpr_number, package_type), trip:trips(trip_name), account:accounts(name)')
+        .select('*, traveller:travellers(full_name_ar, cpr_number, package_type), trip:trips(trip_name), account:accounts(name), receipts(payment_method)')
         .order('issue_date', { ascending: false })
       return (data ?? []) as any[]
     },
@@ -165,6 +166,7 @@ function InvoicesTab() {
           `${Number(i.amount_paid).toFixed(3)} ${i.currency ?? 'BHD'}`,
           <StatusBadge status={i.status} />,
         ])}
+        onView={id => setViewingInvoice(filteredInvoices[id])}
         onEdit={id => {
           const inv = filteredInvoices[id]
           setEditingId(inv.id)
@@ -187,6 +189,24 @@ function InvoicesTab() {
         onPrint={id => printInvoice(filteredInvoices[id])}
         onDelete={id => window.confirm('حذف الفاتورة؟') && del.mutate(filteredInvoices[id].id)}
       />
+
+      {viewingInvoice && (
+        <ViewDetailsModal title="تفاصيل الفاتورة" onClose={() => setViewingInvoice(null)}>
+          <DetailRow label="رقم الفاتورة" value={viewingInvoice.invoice_number ?? '—'} />
+          <DetailRow label="اسم الحاج" value={viewingInvoice.traveller?.full_name_ar ?? '—'} />
+          <DetailRow label="رقم البطاقة" value={viewingInvoice.traveller?.cpr_number ?? '—'} />
+          <DetailRow label="الباقة" value={viewingInvoice.traveller?.package_type ? (PACKAGE_TYPE_LABELS[viewingInvoice.traveller.package_type] ?? viewingInvoice.traveller.package_type) : '—'} />
+          <DetailRow label="الوصف" value={viewingInvoice.description ?? '—'} />
+          <DetailRow label="المبلغ" value={`${Number(viewingInvoice.amount ?? 0).toFixed(3)} ${viewingInvoice.currency ?? 'BHD'}`} />
+          <DetailRow label="المدفوع" value={`${Number(viewingInvoice.amount_paid ?? 0).toFixed(3)} ${viewingInvoice.currency ?? 'BHD'}`} />
+          <DetailRow label="المتبقي" value={`${(Number(viewingInvoice.amount ?? 0) - Number(viewingInvoice.amount_paid ?? 0)).toFixed(3)} ${viewingInvoice.currency ?? 'BHD'}`} />
+          <DetailRow label="الحالة" value={STATUS_TEXT[viewingInvoice.status as string] ?? viewingInvoice.status ?? '—'} />
+          <DetailRow label="تاريخ الإصدار" value={viewingInvoice.issue_date ?? '—'} />
+          <DetailRow label="تاريخ الاستحقاق" value={viewingInvoice.due_date ?? '—'} />
+          <DetailRow label="طريقة الدفع" value={PAYMENT_LABELS[viewingInvoice.receipts?.[0]?.payment_method as string] ?? viewingInvoice.receipts?.[0]?.payment_method ?? '—'} />
+          <DetailRow label="ملاحظات" value={viewingInvoice.notes ?? '—'} />
+        </ViewDetailsModal>
+      )}
 
       {modal && (
         <Modal title={editingId ? 'تعديل الفاتورة' : 'فاتورة جديدة'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate({ data: sel, editId: editingId })} saving={save.isPending}>
@@ -245,6 +265,7 @@ function ReceiptsTab() {
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Receipt>>({ currency: 'BHD', payment_method: 'cash', payment_date: today() })
   const [editingReceipt, setEditingReceipt] = useState<any | null>(null)
+  const [viewingReceipt, setViewingReceipt] = useState<any | null>(null)
   const [search, setSearch] = useState('')
   const [travellerSearch, setTravellerSearch] = useState('')
 
@@ -363,6 +384,7 @@ function ReceiptsTab() {
           PAYMENT_LABELS[r.payment_method as string] ?? r.payment_method,
           r.payment_date,
         ])}
+        onView={id => setViewingReceipt(filteredReceipts[id])}
         onEdit={id => {
           const r = filteredReceipts[id]
           setEditingReceipt(r)
@@ -382,6 +404,19 @@ function ReceiptsTab() {
         onPrint={id => printReceipt(filteredReceipts[id])}
         onDelete={id => window.confirm('حذف الإيصال؟') && del.mutate(filteredReceipts[id].id)}
       />
+
+      {viewingReceipt && (
+        <ViewDetailsModal title="تفاصيل الإيصال" onClose={() => setViewingReceipt(null)}>
+          <DetailRow label="رقم الإيصال" value={viewingReceipt.receipt_number ?? '—'} />
+          <DetailRow label="اسم الحاج" value={viewingReceipt.traveller?.full_name_ar ?? '—'} />
+          <DetailRow label="رقم البطاقة" value={viewingReceipt.traveller?.cpr_number ?? '—'} />
+          <DetailRow label="رقم الفاتورة المرتبط" value={viewingReceipt.invoice?.invoice_number ?? '—'} />
+          <DetailRow label="المبلغ" value={`${Number(viewingReceipt.amount ?? 0).toFixed(3)} ${viewingReceipt.currency ?? 'BHD'}`} />
+          <DetailRow label="طريقة الدفع" value={PAYMENT_LABELS[viewingReceipt.payment_method as string] ?? viewingReceipt.payment_method ?? '—'} />
+          <DetailRow label="تاريخ الدفع" value={viewingReceipt.payment_date ?? '—'} />
+          <DetailRow label="ملاحظات" value={viewingReceipt.notes ?? '—'} />
+        </ViewDetailsModal>
+      )}
 
       {modal && (
         <Modal title={editingReceipt ? 'تعديل الإيصال' : 'إيصال دفع جديد'} onClose={() => { setModal(false); setEditingReceipt(null) }} onSave={() => save.mutate({ data: sel, receipt: editingReceipt })} saving={save.isPending}>
@@ -705,9 +740,17 @@ async function fetchAccounts() {
 }
 
 async function nextNumber(table: string, column: string, prefix: string): Promise<string> {
-  const { count } = await supabase.from(table).select('*', { count: 'exact', head: true })
   const year = new Date().getFullYear()
-  return `${prefix}-${year}-${String((count ?? 0) + 1).padStart(3, '0')}`
+  const fullPrefix = `${prefix}-${year}-`
+  const { data } = await supabase
+    .from(table)
+    .select(column)
+    .ilike(column, `${fullPrefix}%`)
+    .order(column, { ascending: false })
+    .limit(1)
+  const last = data?.[0]?.[column]
+  const lastNum = last ? parseInt(last.split('-').pop() ?? '0') : 0
+  return `${fullPrefix}${String(lastNum + 1).padStart(3, '0')}`
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -719,7 +762,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? ''}`}>{lbl[status] ?? status}</span>
 }
 
-function AccountingTable({ columns, rows, onDelete, onPrint, onEdit }: { columns: string[]; rows: React.ReactNode[][]; onDelete: (i: number) => void; onPrint: (i: number) => void; onEdit: (i: number) => void }) {
+function AccountingTable({ columns, rows, onDelete, onPrint, onEdit, onView }: { columns: string[]; rows: React.ReactNode[][]; onDelete: (i: number) => void; onPrint: (i: number) => void; onEdit: (i: number) => void; onView?: (i: number) => void }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       {rows.length === 0 ? (
@@ -739,6 +782,11 @@ function AccountingTable({ columns, rows, onDelete, onPrint, onEdit }: { columns
                   {row.map((cell, j) => <td key={j} className="px-4 py-3 text-gray-700">{cell}</td>)}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
+                      {onView && (
+                        <button onClick={() => onView(i)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                          <Eye size={14} />
+                        </button>
+                      )}
                       <button onClick={() => onEdit(i)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
                         <Edit2 size={14} />
                       </button>
@@ -767,6 +815,11 @@ function AccountingTable({ columns, rows, onDelete, onPrint, onEdit }: { columns
                   ))}
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end gap-1">
+                  {onView && (
+                    <button onClick={() => onView(i)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                      <Eye size={14} />
+                    </button>
+                  )}
                   <button onClick={() => onEdit(i)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
                     <Edit2 size={14} />
                   </button>
@@ -823,6 +876,29 @@ function Modal({ title, children, onClose, onSave, saving }: { title: string; ch
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ViewDetailsModal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-stretch md:items-center justify-center md:p-4 z-50">
+      <div className="bg-white w-full h-full rounded-none p-6 space-y-3 overflow-y-auto md:h-auto md:max-w-md md:rounded-2xl md:shadow-2xl md:max-h-[90vh]" dir="rtl">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-800">{title}</h2>
+          <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">إغلاق</button>
+        </div>
+        <div className="space-y-2">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+      <p className="text-xs text-gray-500 mb-1">{label}</p>
+      <p className="text-sm text-gray-800 font-medium break-words">{value || '—'}</p>
     </div>
   )
 }
