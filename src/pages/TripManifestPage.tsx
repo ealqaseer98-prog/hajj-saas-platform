@@ -95,15 +95,13 @@ export default function TripManifestPage() {
           <div className="p-8 border-b border-gray-100 print:border-b-2 print:border-black">
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-3xl mb-2">🕌</div>
-                <h1 className="text-2xl font-bold text-gray-900">كشف حاجي رحلة الحج</h1>
+                <h1 className="text-2xl font-bold text-gray-900">كشف حجاج رحلة الحج</h1>
                 <p className="text-gray-500 mt-1">Hajj Trip Passenger Manifest</p>
               </div>
               <div className="text-left text-sm space-y-1">
                 <p className="font-bold text-gray-800">{trip.trip_name}</p>
                 <p className="text-gray-500">المغادرة: {trip.departure_date ?? '—'}</p>
                 <p className="text-gray-500">العودة: {trip.return_date ?? '—'}</p>
-                <p className="text-gray-500">تاريخ الطباعة: {new Date().toLocaleDateString('ar-BH')}</p>
               </div>
             </div>
 
@@ -203,16 +201,6 @@ export default function TripManifestPage() {
               </div>
             </div>
           )}
-
-          {/* Signature lines */}
-          <div className="p-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-8 print:mt-8">
-            {['توقيع المسؤول', 'ختم الوكالة', 'تاريخ التوقيع'].map(label => (
-              <div key={label} className="text-center">
-                <div className="border-b border-gray-400 h-12 mb-2" />
-                <p className="text-xs text-gray-500">{label}</p>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
