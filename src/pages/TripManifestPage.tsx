@@ -151,13 +151,12 @@ export default function TripManifestPage() {
               <Users size={16} /> قائمة الحجاج
             </h2>
             <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse min-w-[900px]">
+            <table className="w-full text-sm border-collapse min-w-[520px]">
               <thead>
                 <tr className="border-b-2 border-gray-200">
                   <th className="text-right py-2 px-3 font-bold text-gray-700">#</th>
-                  <th className="text-right py-2 px-3 font-bold text-gray-700">الاسم بالعربية</th>
+                  <th className="text-right py-2 px-3 font-bold text-gray-700">الاسم</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">رقم البطاقة</th>
-                  <th className="text-right py-2 px-3 font-bold text-gray-700">جواز السفر</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">الجنس</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">الهاتف</th>
                 </tr>
@@ -167,22 +166,11 @@ export default function TripManifestPage() {
                   <tr key={t.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-gray-50 print:bg-gray-50' : ''}`}>
                     <td className="py-2 px-3 text-gray-500">{i + 1}</td>
                     <td className="py-2 px-3 font-medium text-gray-800">{t.full_name_ar}</td>
-                    <td className="py-2 px-3 text-gray-600" dir="ltr">{t.full_name_en}</td>
-                    <td className="py-2 px-3 font-mono text-gray-600">{t.cpr_number}</td>
-                    <td className="py-2 px-3 font-mono text-gray-600">{t.passport_number ?? '—'}</td>
+                    <td className="py-2 px-3 font-mono text-gray-600">{t.cpr_number ?? '—'}</td>
                     <td className="py-2 px-3">
                       {t.gender === 'male' ? 'رجل' : t.gender === 'female' ? 'امرأة' : '—'}
                     </td>
-                    <td className="py-2 px-3">
-                      <span className={`px-1.5 py-0.5 rounded text-xs ${
-                        t.visa_status === 'approved' ? 'bg-green-100 text-green-700' :
-                        t.visa_status === 'rejected' ? 'bg-red-100 text-red-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {t.visa_status === 'approved' ? 'موافق' : t.visa_status === 'rejected' ? 'مرفوض' : 'انتظار'}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 font-mono text-gray-600 text-xs">{t.phone ?? '—'}</td>
+                    <td className="py-2 px-3 font-mono text-gray-600 text-xs" dir="ltr">{t.phone ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
