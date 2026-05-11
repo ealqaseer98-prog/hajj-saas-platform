@@ -109,9 +109,9 @@ export default function TripManifestPage() {
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: 'إجمالي الحجاج', value: travellers.length },
+                { label: 'الباقة',           value: { barr: 'البر', tayaran_dammam: 'طيران - الدمام', tayaran_bahrain: 'طيران - البحرين', tasreeh_only: 'فقط تصريح' }[trip.package_type] ?? trip.package_type },
                 { label: 'رجال',             value: males },
                 { label: 'نساء',             value: females },
-                { label: 'الباقة',           value: { barr: 'البر', tayaran_dammam: 'طيران - الدمام', tayaran_bahrain: 'طيران - البحرين', tasreeh_only: 'فقط تصريح' }[trip.package_type] ?? trip.package_type },
               ].map(s => (
                 <div key={s.label} className="bg-gray-50 print:bg-gray-100 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-gray-800">{s.value}</p>
