@@ -44,7 +44,34 @@ export default function TripManifestPage() {
   const males   = travellers.filter((t: any) => t.gender === 'male').length
   const females = travellers.filter((t: any) => t.gender === 'female').length
 
-  const printManifest = () => {
+  const printManifest = async () => {
+    const container = document.getElementById('manifest-content')
+    if (!container) {
+      window.print()
+      return
+    }
+
+    const externalImages = Array.from(container.querySelectorAll('img')).filter((img) =>
+      /^https?:\/\//i.test(img.currentSrc || img.src)
+    )
+    const pendingImages = externalImages.filter((img) => !(img.complete && img.naturalWidth > 0))
+
+    if (pendingImages.length > 0) {
+      await Promise.race([
+        Promise.all(
+          pendingImages.map(
+            (img) =>
+              new Promise<void>((resolve) => {
+                const done = () => resolve()
+                img.addEventListener('load', done, { once: true })
+                img.addEventListener('error', done, { once: true })
+              })
+          )
+        ),
+        new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+      ])
+    }
+
     window.print()
   }
 
@@ -93,6 +120,14 @@ export default function TripManifestPage() {
 
           {/* Header */}
           <div className="p-8 border-b border-gray-100 print:border-b-2 print:border-black">
+            <div className="text-center mb-4">
+              <img
+                src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png"
+                alt="Company Logo"
+                crossOrigin="anonymous"
+                style={{ height: '80px', width: 'auto', margin: '0 auto' }}
+              />
+            </div>
             <div className="flex items-start justify-between">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">كشف رحلة الحج</h1>
