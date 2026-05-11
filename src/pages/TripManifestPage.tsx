@@ -95,7 +95,7 @@ export default function TripManifestPage() {
           <div className="p-8 border-b border-gray-100 print:border-b-2 print:border-black">
             <div className="flex items-start justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">كشف حجاج رحلة الحج</h1>
+                <h1 className="text-2xl font-bold text-gray-900">كشف رحلة الحج</h1>
                 <p className="text-gray-500 mt-1">Hajj Trip Passenger Manifest</p>
               </div>
               <div className="text-left text-sm space-y-1">
