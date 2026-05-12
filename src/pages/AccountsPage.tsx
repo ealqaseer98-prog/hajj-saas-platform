@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, ArrowLeftRight, TrendingUp, List, X, Edit2 } from 'lucide-react'
+import { Plus, ArrowLeftRight, TrendingUp, List, X, Edit2, Trash2, RefreshCw } from 'lucide-react'
 import type { Account } from '../types'
 
 function formatMoney(value: number, currency: string | undefined) {
@@ -11,6 +11,49 @@ function formatMoney(value: number, currency: string | undefined) {
     return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
   return Number(value).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+}
+
+/** Sets balance = opening_balance + Σ(receipts) − Σ(expenses) + transfers_in − transfers_out per account. */
+async function recalculateAllAccountBalances() {
+  const { data: accountRows, error: accErr } = await supabase.from('accounts').select('id, opening_balance')
+  if (accErr) throw accErr
+  const balances = new Map<string, number>()
+  for (const row of accountRows ?? []) {
+    const { id, opening_balance } = row as { id: string; opening_balance: number | null }
+    balances.set(id, Number(opening_balance ?? 0))
+  }
+
+  const { data: receipts, error: rErr } = await supabase.from('receipts').select('account_id, amount')
+  if (rErr) throw rErr
+  for (const row of receipts ?? []) {
+    const aid = row.account_id as string | null
+    if (aid) balances.set(aid, (balances.get(aid) ?? 0) + Number(row.amount ?? 0))
+  }
+
+  const { data: expenses, error: eErr } = await supabase.from('expenses').select('account_id, amount')
+  if (eErr) throw eErr
+  for (const row of expenses ?? []) {
+    const aid = row.account_id as string | null
+    if (aid) balances.set(aid, (balances.get(aid) ?? 0) - Number(row.amount ?? 0))
+  }
+
+  const { data: transfers, error: tErr } = await supabase
+    .from('account_transfers')
+    .select('from_account_id, to_account_id, amount')
+  if (tErr) throw tErr
+  for (const row of transfers ?? []) {
+    const amt = Number(row.amount ?? 0)
+    const fromId = row.from_account_id as string
+    const toId = row.to_account_id as string
+    balances.set(fromId, (balances.get(fromId) ?? 0) - amt)
+    balances.set(toId, (balances.get(toId) ?? 0) + amt)
+  }
+
+  await Promise.all(
+    [...balances.entries()].map(([accountId, balance]) =>
+      supabase.from('accounts').update({ balance }).eq('id', accountId).throwOnError()
+    )
+  )
 }
 
 export default function AccountsPage() {
@@ -35,7 +78,13 @@ export default function AccountsPage() {
 
   const createAcc = useMutation({
     mutationFn: async (a: Partial<Account>) => {
-      await supabase.from('accounts').insert(a).throwOnError()
+      const opening = Number(a.opening_balance ?? a.balance ?? 0)
+      const balance = Number(a.balance ?? opening)
+      await supabase.from('accounts').insert({
+        ...a,
+        opening_balance: opening,
+        balance,
+      }).throwOnError()
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['accounts-list'] }); setAddModal(false) },
   })
@@ -61,6 +110,16 @@ export default function AccountsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['accounts-list'] }); setIncome(false) },
   })
 
+  const refreshBalances = useMutation({
+    mutationFn: async () => {
+      await recalculateAllAccountBalances()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['accounts-list'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    },
+  })
+
   return (
     <div className="p-6 space-y-5" dir="rtl">
       <div className="flex items-center justify-between">
@@ -70,7 +129,15 @@ export default function AccountsPage() {
             إجمالي الأرصدة: {formatMoney(totalBalance, 'BHD')} BHD
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
+          <button
+            type="button"
+            onClick={() => refreshBalances.mutate()}
+            disabled={refreshBalances.isPending}
+            className="flex items-center gap-2 border border-amber-500 text-amber-800 hover:bg-amber-50 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={refreshBalances.isPending ? 'animate-spin' : ''} /> تحديث الأرصدة
+          </button>
           <button onClick={() => setIncome(true)}
             className="flex items-center gap-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 px-3 py-2 rounded-lg text-sm font-medium">
             <TrendingUp size={15} /> إيداع
@@ -263,6 +330,72 @@ function AccountTransactionsModal({
     qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
   }
 
+  const invalidateAccountsBalances = () => {
+    qc.invalidateQueries({ queryKey: ['accounts-list'] })
+    qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+  }
+
+  const deleteReceipt = useMutation({
+    mutationFn: async (receiptId: string) => {
+      await supabase.from('receipts').delete().eq('id', receiptId).throwOnError()
+    },
+    onSuccess: () => {
+      invalidateTx()
+      invalidateAccountsBalances()
+    },
+  })
+
+  const deleteExpense = useMutation({
+    mutationFn: async (expenseId: string) => {
+      await supabase.from('expenses').delete().eq('id', expenseId).throwOnError()
+    },
+    onSuccess: () => {
+      invalidateTx()
+      invalidateAccountsBalances()
+    },
+  })
+
+  const deleteTransfer = useMutation({
+    mutationFn: async (t: { id: string; from_account_id: string; to_account_id: string; amount: number }) => {
+      const amt = Number(t.amount ?? 0)
+      const { data: fromAcc } = await supabase.from('accounts').select('balance').eq('id', t.from_account_id).single()
+      const { data: toAcc } = await supabase.from('accounts').select('balance').eq('id', t.to_account_id).single()
+      await supabase
+        .from('accounts')
+        .update({ balance: Number(fromAcc?.balance ?? 0) + amt })
+        .eq('id', t.from_account_id)
+        .throwOnError()
+      await supabase
+        .from('accounts')
+        .update({ balance: Number(toAcc?.balance ?? 0) - amt })
+        .eq('id', t.to_account_id)
+        .throwOnError()
+      await supabase.from('account_transfers').delete().eq('id', t.id).throwOnError()
+    },
+    onSuccess: () => {
+      invalidateTx()
+      invalidateAccountsBalances()
+    },
+  })
+    if (!window.confirm('حذف هذا الإيصال؟')) return
+    deleteReceipt.mutate(r.id)
+  }
+  const confirmDeleteExpense = (e: any) => {
+    if (!window.confirm('حذف هذا المصروف؟')) return
+    deleteExpense.mutate(e.id)
+  }
+  const confirmDeleteTransfer = (t: any) => {
+    if (!window.confirm('حذف هذا التحويل وعكس أثره على الأرصدة؟')) return
+    deleteTransfer.mutate({
+      id: t.id,
+      from_account_id: t.from_account_id,
+      to_account_id: t.to_account_id,
+      amount: Number(t.amount ?? 0),
+    })
+  }
+
+  const deleting = deleteReceipt.isPending || deleteExpense.isPending || deleteTransfer.isPending
+
   const saveReceipt = useMutation({
     mutationFn: async () => {
       if (!edit || edit.kind !== 'receipt') return
@@ -364,12 +497,12 @@ function AccountTransactionsModal({
                         <th className="text-right px-3 py-2 font-medium">اسم الحاج</th>
                         <th className="text-right px-3 py-2 font-medium">المبلغ</th>
                         <th className="text-right px-3 py-2 font-medium">التاريخ</th>
-                        <th className="w-12 px-2 py-2" />
+                        <th className="text-center px-2 py-2 w-24 font-medium">إجراءات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {txReceipts.length === 0 ? (
-                        <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">لا توجد إيصالات</td></tr>
+                        <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">لا توجد إيصالات</td></tr>
                       ) : txReceipts.map((r: any) => (
                         <tr key={r.id} className="hover:bg-gray-50/80">
                           <td className="px-3 py-2 font-mono text-xs">{r.receipt_number ?? '—'}</td>
@@ -377,9 +510,14 @@ function AccountTransactionsModal({
                           <td className="px-3 py-2 whitespace-nowrap">{formatMoney(Number(r.amount), r.currency)} {r.currency ?? 'BHD'}</td>
                           <td className="px-3 py-2">{r.payment_date ?? '—'}</td>
                           <td className="px-2 py-2">
-                            <button type="button" onClick={() => openEdit('receipt', r)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50" title="تعديل">
-                              <Edit2 size={15} />
-                            </button>
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button type="button" disabled={deleting} onClick={() => openEdit('receipt', r)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50 disabled:opacity-40" title="تعديل">
+                                <Edit2 size={15} />
+                              </button>
+                              <button type="button" disabled={deleting} onClick={() => confirmDeleteReceipt(r)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40" title="حذف">
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -398,12 +536,12 @@ function AccountTransactionsModal({
                         <th className="text-right px-3 py-2 font-medium">الوصف</th>
                         <th className="text-right px-3 py-2 font-medium">المبلغ</th>
                         <th className="text-right px-3 py-2 font-medium">التاريخ</th>
-                        <th className="w-12 px-2 py-2" />
+                        <th className="text-center px-2 py-2 w-24 font-medium">إجراءات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {txExpenses.length === 0 ? (
-                        <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">لا توجد مصروفات</td></tr>
+                        <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">لا توجد مصروفات</td></tr>
                       ) : txExpenses.map((e: any) => (
                         <tr key={e.id} className="hover:bg-gray-50/80">
                           <td className="px-3 py-2 font-mono text-xs">{e.expense_number ?? '—'}</td>
@@ -411,9 +549,14 @@ function AccountTransactionsModal({
                           <td className="px-3 py-2 whitespace-nowrap">{formatMoney(Number(e.amount), e.currency)} {e.currency ?? 'BHD'}</td>
                           <td className="px-3 py-2">{e.expense_date ?? '—'}</td>
                           <td className="px-2 py-2">
-                            <button type="button" onClick={() => openEdit('expense', e)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50" title="تعديل">
-                              <Edit2 size={15} />
-                            </button>
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button type="button" disabled={deleting} onClick={() => openEdit('expense', e)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50 disabled:opacity-40" title="تعديل">
+                                <Edit2 size={15} />
+                              </button>
+                              <button type="button" disabled={deleting} onClick={() => confirmDeleteExpense(e)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40" title="حذف">
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -432,12 +575,12 @@ function AccountTransactionsModal({
                         <th className="text-right px-3 py-2 font-medium">من / إلى</th>
                         <th className="text-right px-3 py-2 font-medium">المبلغ</th>
                         <th className="text-right px-3 py-2 font-medium">التاريخ</th>
-                        <th className="w-12 px-2 py-2" />
+                        <th className="text-center px-2 py-2 w-24 font-medium">إجراءات</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {txTransfers.length === 0 ? (
-                        <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">لا توجد تحويلات</td></tr>
+                        <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">لا توجد تحويلات</td></tr>
                       ) : txTransfers.map((t: any) => {
                         const out = t.from_account_id === id
                         return (
@@ -456,9 +599,14 @@ function AccountTransactionsModal({
                             </td>
                             <td className="px-3 py-2">{t.transfer_date ?? '—'}</td>
                             <td className="px-2 py-2">
-                              <button type="button" onClick={() => openEdit('transfer', t)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50" title="تعديل">
-                                <Edit2 size={15} />
-                              </button>
+                              <div className="flex items-center justify-end gap-0.5">
+                                <button type="button" disabled={deleting} onClick={() => openEdit('transfer', t)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50 disabled:opacity-40" title="تعديل">
+                                  <Edit2 size={15} />
+                                </button>
+                                <button type="button" disabled={deleting} onClick={() => confirmDeleteTransfer(t)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40" title="حذف">
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         )
@@ -490,7 +638,7 @@ function AccountTransactionsModal({
               </>
             )}
             <div className="flex gap-3 pt-2">
-              <button type="button" disabled={saving} onClick={submitEdit}
+              <button type="button" disabled={saving || deleting} onClick={submitEdit}
                 className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
                 {saving ? 'جارٍ الحفظ...' : 'حفظ'}
               </button>

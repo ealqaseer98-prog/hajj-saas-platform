@@ -107,13 +107,14 @@ export interface TravellerTrip {
 }
 
 export interface Account {
-  id:           string
-  name:         string
-  account_type: AccountType
-  balance:      number
-  currency:     string
-  notes:        string | null
-  created_at:   string
+  id:               string
+  name:             string
+  account_type:     AccountType
+  balance:          number
+  opening_balance:  number | null
+  currency:         string
+  notes:            string | null
+  created_at:       string
 }
 
 export interface Invoice {
