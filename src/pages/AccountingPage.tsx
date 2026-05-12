@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search, Eye, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search, Eye, RefreshCw, FileDown } from 'lucide-react'
 import type { Invoice, Receipt, Expense, Traveller, Trip, Account, ExpenseCategory } from '../types'
 
 type Tab = 'invoices' | 'receipts' | 'expenses'
@@ -534,6 +534,10 @@ function ExpensesTab() {
   const [viewingExpense, setViewingExpense] = useState<any | null>(null)
   const [search, setSearch] = useState('')
   const [travellerSearch, setTravellerSearch] = useState('')
+  const [pdfReportModal, setPdfReportModal] = useState(false)
+  const [pdfAllExpenses, setPdfAllExpenses] = useState(false)
+  const [pdfDateFrom, setPdfDateFrom] = useState(monthStartDate)
+  const [pdfDateTo, setPdfDateTo] = useState(today)
 
   const { data: expenses = [] } = useQuery({
     queryKey: ['expenses'],
@@ -612,11 +616,45 @@ function ExpensesTab() {
     })
   }
 
+  const generateExpensePdfReport = () => {
+    let list: any[] = [...expenses]
+    if (!pdfAllExpenses) {
+      if (!pdfDateFrom || !pdfDateTo) {
+        window.alert('يرجى اختيار من تاريخ وإلى تاريخ')
+        return
+      }
+      if (pdfDateFrom > pdfDateTo) {
+        window.alert('تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مطابقاً له')
+        return
+      }
+      list = list.filter((e: any) => {
+        const d = e.expense_date ?? ''
+        return d >= pdfDateFrom && d <= pdfDateTo
+      })
+    }
+    const periodLabel = pdfAllExpenses ? 'جميع المصروفات' : `من ${pdfDateFrom} إلى ${pdfDateTo}`
+    openExpenseReportPrintWindow(periodLabel, list)
+    setPdfReportModal(false)
+  }
+
   return (
     <>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-sm text-red-600 font-medium">إجمالي المصروفات: {formatBhdAmount(totalExpenses)} BHD</p>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="تقرير PDF"
+            onClick={() => {
+              setPdfAllExpenses(false)
+              setPdfDateFrom(monthStartDate())
+              setPdfDateTo(today())
+              setPdfReportModal(true)
+            }}
+            className="flex items-center gap-1.5 border border-gray-200 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium"
+          >
+            <FileDown size={16} /> تقرير PDF
+          </button>
           <button
             type="button"
             title="تحديث القائمة"
@@ -749,6 +787,61 @@ function ExpensesTab() {
             onChange={v => setSel(s => ({ ...s, notes: v }))} />
         </Modal>
       )}
+
+      {pdfReportModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" dir="rtl">
+            <h2 className="text-lg font-bold text-gray-800">تقرير المصروفات (PDF)</h2>
+            <label className={`flex items-center gap-2 text-sm ${pdfAllExpenses ? 'text-emerald-800' : 'text-gray-700'}`}>
+              <input
+                type="checkbox"
+                checked={pdfAllExpenses}
+                onChange={e => setPdfAllExpenses(e.target.checked)}
+                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              كل المصروفات
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={`block text-xs font-medium mb-1 ${pdfAllExpenses ? 'text-gray-400' : 'text-gray-600'}`}>من تاريخ</label>
+                <input
+                  type="date"
+                  className={ic + (pdfAllExpenses ? ' opacity-50 cursor-not-allowed bg-gray-50' : '')}
+                  value={pdfDateFrom}
+                  disabled={pdfAllExpenses}
+                  onChange={e => setPdfDateFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={`block text-xs font-medium mb-1 ${pdfAllExpenses ? 'text-gray-400' : 'text-gray-600'}`}>إلى تاريخ</label>
+                <input
+                  type="date"
+                  className={ic + (pdfAllExpenses ? ' opacity-50 cursor-not-allowed bg-gray-50' : '')}
+                  value={pdfDateTo}
+                  disabled={pdfAllExpenses}
+                  onChange={e => setPdfDateTo(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={generateExpensePdfReport}
+                className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 rounded-lg text-sm font-medium"
+              >
+                إنشاء التقرير
+              </button>
+              <button
+                type="button"
+                onClick={() => setPdfReportModal(false)}
+                className="flex-1 border border-gray-200 text-gray-700 hover:bg-gray-50 py-2.5 rounded-lg text-sm font-medium"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -759,6 +852,11 @@ const CATEGORY_LABELS: Record<string, string> = { hotel: 'فندق', transport: 
 const STATUS_TEXT: Record<string, string> = { paid: 'مدفوعة', unpaid: 'غير مدفوعة', partial: 'جزئية', cancelled: 'ملغاة' }
 
 function today() { return new Date().toISOString().slice(0, 10) }
+
+function monthStartDate() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
 
 function escapeHtml(value: string) {
   return value
@@ -809,6 +907,92 @@ function openPrintWindow({ docType, rows }: { docType: string; rows: [string, st
       <h2 class="subtitle">${escapeHtml(docType)}</h2>
       <p class="date">التاريخ: ${escapeHtml(todayText)}</p>
       <table><tbody>${tableRows}</tbody></table>
+      <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 500); }, 900); }</script>
+    </body>
+    </html>
+  `)
+  win.document.close()
+}
+
+function openExpenseReportPrintWindow(periodLabel: string, expensesList: any[]) {
+  const win = window.open('', '_blank', 'width=1100,height=800')
+  if (!win) return
+
+  const reportTitle = `تقرير المصروفات - ${COMPANY_TITLE}`
+  const sorted = [...expensesList].sort((a, b) =>
+    String(a.expense_date ?? '').localeCompare(String(b.expense_date ?? ''))
+  )
+
+  const totalsByCurrency = new Map<string, number>()
+  for (const e of sorted) {
+    const c = (e.currency ?? 'BHD') as string
+    totalsByCurrency.set(c, (totalsByCurrency.get(c) ?? 0) + Number(e.amount ?? 0))
+  }
+  const totalLine = [...totalsByCurrency.entries()]
+    .map(([c, sum]) => `${formatCurrencyAmount(sum, c)} ${c}`)
+    .join(' — ') || `${formatCurrencyAmount(0, 'BHD')} BHD`
+
+  const bodyRows = sorted
+    .map(
+      (e: any) => `
+    <tr>
+      <td>${escapeHtml(String(e.expense_number ?? '—'))}</td>
+      <td>${escapeHtml(String(e.description ?? '—'))}</td>
+      <td>${escapeHtml(CATEGORY_LABELS[e.category as string] ?? e.category ?? '—')}</td>
+      <td dir="ltr">${escapeHtml(`${formatCurrencyAmount(Number(e.amount ?? 0), e.currency)} ${e.currency ?? 'BHD'}`)}</td>
+      <td>${escapeHtml(String(e.expense_date ?? '—'))}</td>
+      <td>${escapeHtml(String(e.account?.name ?? '—'))}</td>
+    </tr>`
+    )
+    .join('')
+
+  win.document.write(`
+    <!doctype html>
+    <html dir="rtl" lang="ar">
+    <head>
+      <meta charset="UTF-8" />
+      <title>${escapeHtml(reportTitle)}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+      <style>
+        @page { size: A4; margin: 10mm; }
+        * { box-sizing: border-box; font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
+        body { margin: 0; padding: 24px; color: #111827; }
+        .logo-wrap { text-align: center; margin-bottom: 12px; }
+        .logo { height: 80px; width: auto; object-fit: contain; }
+        .title { text-align: center; margin: 0 0 8px; font-size: 22px; font-weight: 700; }
+        .period { text-align: center; margin: 0 0 20px; font-size: 15px; color: #374151; font-weight: 600; }
+        .report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        .report-table th, .report-table td { border: 1px solid #d1d5db; padding: 8px 10px; font-size: 13px; text-align: right; vertical-align: top; }
+        .report-table thead th { background: #f3f4f6; font-weight: 700; }
+        .report-table tfoot td { background: #ecfdf5; font-weight: 700; border-top: 2px solid #059669; }
+      </style>
+    </head>
+    <body>
+      <div class="logo-wrap">
+        <img class="logo" crossorigin="anonymous" src="${COMPANY_LOGO_URL}" alt="" />
+      </div>
+      <h1 class="title">${escapeHtml(reportTitle)}</h1>
+      <p class="period">${escapeHtml(periodLabel)}</p>
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>رقم المصروف</th>
+            <th>الوصف</th>
+            <th>الفئة</th>
+            <th>المبلغ</th>
+            <th>التاريخ</th>
+            <th>الحساب</th>
+          </tr>
+        </thead>
+        <tbody>${bodyRows || '<tr><td colspan="6" style="text-align:center;color:#6b7280">لا توجد مصروفات</td></tr>'}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6" style="text-align:right">الإجمالي: ${escapeHtml(totalLine)}</td>
+          </tr>
+        </tfoot>
+      </table>
       <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 500); }, 900); }</script>
     </body>
     </html>
