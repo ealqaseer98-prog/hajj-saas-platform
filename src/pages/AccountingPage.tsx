@@ -394,9 +394,15 @@ function ReceiptsTab() {
     })
   }
 
+  const totalCollectedReceipts = filteredReceipts.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0)
+
   return (
     <>
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-sm text-red-600 font-medium">
+          إجمالي المبالغ المحصّلة: {formatBhdAmount(totalCollectedReceipts)} BHD
+        </p>
+        <div className="flex items-center gap-2">
         <button
           type="button"
           title="تحديث القائمة"
@@ -409,6 +415,7 @@ function ReceiptsTab() {
           className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <Plus size={15} /> إيصال دفع جديد
         </button>
+        </div>
       </div>
 
       <div className="relative">
@@ -560,7 +567,16 @@ function ExpensesTab() {
   const save = useMutation({
     mutationFn: async ({ data, editId }: { data: Partial<Expense>; editId: string | null }) => {
       if (editId) {
-        await supabase.from('expenses').update(data).eq('id', editId).throwOnError()
+        await supabase
+          .from('expenses')
+          .update({
+            ...data,
+            account_id: data.account_id || null,
+            traveller_id: data.traveller_id || null,
+            trip_id: data.trip_id || null,
+          })
+          .eq('id', editId)
+          .throwOnError()
         return
       }
       const num = await nextNumber('expenses', 'expense_number', 'EXP')
