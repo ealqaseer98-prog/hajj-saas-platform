@@ -1,8 +1,8 @@
 // src/pages/AccountsPage.tsx
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, ArrowLeftRight, TrendingUp } from 'lucide-react'
+import { Plus, ArrowLeftRight, TrendingUp, List, X, Edit2 } from 'lucide-react'
 import type { Account } from '../types'
 
 function formatMoney(value: number, currency: string | undefined) {
@@ -15,12 +15,13 @@ function formatMoney(value: number, currency: string | undefined) {
 
 export default function AccountsPage() {
   const qc = useQueryClient()
-  const [addModal, setAddModal]       = useState(false)
-  const [transferModal, setTransfer]  = useState(false)
-  const [incomeModal, setIncome]      = useState(false)
-  const [newAcc, setNewAcc]           = useState<Partial<Account>>({ account_type: 'bank', currency: 'BHD' })
-  const [xfer, setXfer]               = useState({ from: '', to: '', amount: '', notes: '' })
-  const [inc, setInc]                 = useState({ account_id: '', amount: '', notes: '' })
+  const [addModal, setAddModal] = useState(false)
+  const [transferModal, setTransfer] = useState(false)
+  const [incomeModal, setIncome] = useState(false)
+  const [newAcc, setNewAcc] = useState<Partial<Account>>({ account_type: 'bank', currency: 'BHD' })
+  const [xfer, setXfer] = useState({ from: '', to: '', amount: '', notes: '' })
+  const [inc, setInc] = useState({ account_id: '', amount: '', notes: '' })
+  const [transactionsForAccount, setTransactionsForAccount] = useState<Account | null>(null)
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts-list'],
@@ -33,7 +34,9 @@ export default function AccountsPage() {
   const totalBalance = accounts.reduce((s, a) => s + Number(a.balance), 0)
 
   const createAcc = useMutation({
-    mutationFn: (a: Partial<Account>) => supabase.from('accounts').insert(a).throwOnError(),
+    mutationFn: async (a: Partial<Account>) => {
+      await supabase.from('accounts').insert(a).throwOnError()
+    },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['accounts-list'] }); setAddModal(false) },
   })
 
@@ -50,7 +53,6 @@ export default function AccountsPage() {
 
   const addIncome = useMutation({
     mutationFn: async () => {
-      // Direct balance addition (non-invoice income)
       const { data: acc } = await supabase.from('accounts').select('balance').eq('id', inc.account_id).single()
       await supabase.from('accounts')
         .update({ balance: Number(acc?.balance ?? 0) + +inc.amount })
@@ -84,7 +86,6 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {/* Account cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {accounts.map(acc => (
           <div key={acc.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
@@ -104,11 +105,17 @@ export default function AccountsPage() {
                 <span className="text-sm font-normal text-gray-400 mr-1">{acc.currency}</span>
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setTransactionsForAccount(acc)}
+              className="w-full flex items-center justify-center gap-2 border border-gray-200 text-gray-700 hover:bg-gray-50 py-2 rounded-lg text-sm font-medium"
+            >
+              <List size={16} /> المعاملات
+            </button>
           </div>
         ))}
       </div>
 
-      {/* Add account modal */}
       {addModal && (
         <SimpleModal title="إضافة حساب جديد" onClose={() => setAddModal(false)}
           onSave={() => createAcc.mutate(newAcc)} saving={createAcc.isPending}>
@@ -125,7 +132,6 @@ export default function AccountsPage() {
         </SimpleModal>
       )}
 
-      {/* Transfer modal */}
       {transferModal && (
         <SimpleModal title="تحويل بين الحسابات" onClose={() => setTransfer(false)}
           onSave={() => transfer.mutate()} saving={transfer.isPending}>
@@ -142,7 +148,6 @@ export default function AccountsPage() {
         </SimpleModal>
       )}
 
-      {/* Add income modal */}
       {incomeModal && (
         <SimpleModal title="إيداع مبلغ" onClose={() => setIncome(false)}
           onSave={() => addIncome.mutate()} saving={addIncome.isPending}>
@@ -155,26 +160,375 @@ export default function AccountsPage() {
             onChange={v => setInc(s => ({ ...s, notes: v }))} />
         </SimpleModal>
       )}
+
+      {transactionsForAccount && (
+        <AccountTransactionsModal
+          account={transactionsForAccount}
+          accounts={accounts}
+          onClose={() => setTransactionsForAccount(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+type EditKind = 'receipt' | 'expense' | 'transfer'
+
+function AccountTransactionsModal({
+  account,
+  accounts,
+  onClose,
+}: {
+  account: Account
+  accounts: Account[]
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const id = account.id
+  const accName = (aid: string) => accounts.find(a => a.id === aid)?.name ?? '—'
+
+  const { data: txReceipts = [], isLoading: loadR } = useQuery({
+    queryKey: ['account-receipts', id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('receipts')
+        .select('*, traveller:travellers(full_name_ar)')
+        .eq('account_id', id)
+        .order('payment_date', { ascending: false })
+      return (data ?? []) as any[]
+    },
+    enabled: !!id,
+  })
+
+  const { data: txExpenses = [], isLoading: loadE } = useQuery({
+    queryKey: ['account-expenses', id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('account_id', id)
+        .order('expense_date', { ascending: false })
+      return (data ?? []) as any[]
+    },
+    enabled: !!id,
+  })
+
+  const { data: txTransfers = [], isLoading: loadT } = useQuery({
+    queryKey: ['account-transfers', id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('account_transfers')
+        .select('*')
+        .or(`from_account_id.eq.${id},to_account_id.eq.${id}`)
+        .order('transfer_date', { ascending: false })
+      return (data ?? []) as any[]
+    },
+    enabled: !!id,
+  })
+
+  const [edit, setEdit] = useState<null | { kind: EditKind; row: any }>(null)
+  const [fAmount, setFAmount] = useState('')
+  const [fDate, setFDate] = useState('')
+  const [fNotes, setFNotes] = useState('')
+  const [fFrom, setFFrom] = useState('')
+  const [fTo, setFTo] = useState('')
+
+  useEffect(() => {
+    if (!edit) return
+    const r = edit.row
+    if (edit.kind === 'receipt') {
+      setFAmount(String(r.amount ?? ''))
+      setFDate(r.payment_date ?? '')
+      setFNotes(r.notes ?? '')
+    } else if (edit.kind === 'expense') {
+      setFAmount(String(r.amount ?? ''))
+      setFDate(r.expense_date ?? '')
+      setFNotes(r.notes ?? '')
+    } else {
+      setFAmount(String(r.amount ?? ''))
+      setFDate(r.transfer_date ?? '')
+      setFNotes(r.notes ?? '')
+      setFFrom(r.from_account_id ?? '')
+      setFTo(r.to_account_id ?? '')
+    }
+  }, [edit])
+
+  const invalidateTx = () => {
+    qc.invalidateQueries({ queryKey: ['account-receipts', id] })
+    qc.invalidateQueries({ queryKey: ['account-expenses', id] })
+    qc.invalidateQueries({ queryKey: ['account-transfers', id] })
+    qc.invalidateQueries({ queryKey: ['accounts-list'] })
+    qc.invalidateQueries({ queryKey: ['receipts'] })
+    qc.invalidateQueries({ queryKey: ['expenses'] })
+    qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+  }
+
+  const saveReceipt = useMutation({
+    mutationFn: async () => {
+      if (!edit || edit.kind !== 'receipt') return
+      await supabase
+        .from('receipts')
+        .update({
+          amount: +fAmount,
+          payment_date: fDate,
+          notes: fNotes.trim() || null,
+        })
+        .eq('id', edit.row.id)
+        .throwOnError()
+    },
+    onSuccess: () => { invalidateTx(); setEdit(null) },
+  })
+
+  const saveExpense = useMutation({
+    mutationFn: async () => {
+      if (!edit || edit.kind !== 'expense') return
+      await supabase
+        .from('expenses')
+        .update({
+          amount: +fAmount,
+          expense_date: fDate,
+          notes: fNotes.trim() || null,
+        })
+        .eq('id', edit.row.id)
+        .throwOnError()
+    },
+    onSuccess: () => { invalidateTx(); setEdit(null) },
+  })
+
+  const saveTransfer = useMutation({
+    mutationFn: async () => {
+      if (!edit || edit.kind !== 'transfer') return
+      if (!fFrom || !fTo || fFrom === fTo) throw new Error('اختر حسابين مختلفين')
+      await supabase
+        .from('account_transfers')
+        .update({
+          from_account_id: fFrom,
+          to_account_id: fTo,
+          amount: +fAmount,
+          transfer_date: fDate,
+          notes: fNotes.trim() || null,
+        })
+        .eq('id', edit.row.id)
+        .throwOnError()
+    },
+    onSuccess: () => { invalidateTx(); setEdit(null) },
+    onError: (e: Error) => window.alert(e.message),
+  })
+
+  const saving = saveReceipt.isPending || saveExpense.isPending || saveTransfer.isPending
+
+  const openEdit = (kind: EditKind, row: any) => setEdit({ kind, row })
+
+  const submitEdit = () => {
+    if (!edit) return
+    if (fAmount === '' || Number.isNaN(+fAmount) || !fDate) {
+      window.alert('يرجى إدخال مبلغ وتاريخ صالحين')
+      return
+    }
+    if (edit.kind === 'transfer' && (!fFrom || !fTo || fFrom === fTo)) {
+      window.alert('يرجى اختيار حسابين مختلفين للتحويل')
+      return
+    }
+    if (edit.kind === 'receipt') saveReceipt.mutate()
+    else if (edit.kind === 'expense') saveExpense.mutate()
+    else saveTransfer.mutate()
+  }
+
+  const loading = loadR || loadE || loadT
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-stretch justify-center bg-black/50 p-0 md:p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white w-full max-w-5xl min-h-full md:min-h-0 md:max-h-[92vh] md:rounded-2xl md:shadow-2xl flex flex-col" dir="rtl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 md:px-6 shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">المعاملات — {account.name}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">إيصالات، مصروفات، وتحويلات مرتبطة بهذا الحساب</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100" aria-label="إغلاق">
+            <X size={22} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5 space-y-8">
+          {loading && <p className="text-sm text-gray-500 text-center py-6">جارٍ التحميل...</p>}
+
+          {!loading && (
+            <>
+              <section>
+                <h3 className="text-sm font-bold text-emerald-800 mb-2 flex items-center gap-2">وارد — إيصالات الدفع</h3>
+                <div className="overflow-x-auto rounded-xl border border-gray-100">
+                  <table className="w-full text-sm min-w-[640px]">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-right px-3 py-2 font-medium">رقم الإيصال</th>
+                        <th className="text-right px-3 py-2 font-medium">اسم الحاج</th>
+                        <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                        <th className="text-right px-3 py-2 font-medium">التاريخ</th>
+                        <th className="w-12 px-2 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {txReceipts.length === 0 ? (
+                        <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">لا توجد إيصالات</td></tr>
+                      ) : txReceipts.map((r: any) => (
+                        <tr key={r.id} className="hover:bg-gray-50/80">
+                          <td className="px-3 py-2 font-mono text-xs">{r.receipt_number ?? '—'}</td>
+                          <td className="px-3 py-2">{r.traveller?.full_name_ar ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatMoney(Number(r.amount), r.currency)} {r.currency ?? 'BHD'}</td>
+                          <td className="px-3 py-2">{r.payment_date ?? '—'}</td>
+                          <td className="px-2 py-2">
+                            <button type="button" onClick={() => openEdit('receipt', r)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50" title="تعديل">
+                              <Edit2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-sm font-bold text-red-800 mb-2">صادر — المصروفات</h3>
+                <div className="overflow-x-auto rounded-xl border border-gray-100">
+                  <table className="w-full text-sm min-w-[640px]">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-right px-3 py-2 font-medium">رقم المصروف</th>
+                        <th className="text-right px-3 py-2 font-medium">الوصف</th>
+                        <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                        <th className="text-right px-3 py-2 font-medium">التاريخ</th>
+                        <th className="w-12 px-2 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {txExpenses.length === 0 ? (
+                        <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">لا توجد مصروفات</td></tr>
+                      ) : txExpenses.map((e: any) => (
+                        <tr key={e.id} className="hover:bg-gray-50/80">
+                          <td className="px-3 py-2 font-mono text-xs">{e.expense_number ?? '—'}</td>
+                          <td className="px-3 py-2 max-w-[200px] truncate">{e.description ?? '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatMoney(Number(e.amount), e.currency)} {e.currency ?? 'BHD'}</td>
+                          <td className="px-3 py-2">{e.expense_date ?? '—'}</td>
+                          <td className="px-2 py-2">
+                            <button type="button" onClick={() => openEdit('expense', e)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50" title="تعديل">
+                              <Edit2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-sm font-bold text-blue-800 mb-2">التحويلات</h3>
+                <div className="overflow-x-auto rounded-xl border border-gray-100">
+                  <table className="w-full text-sm min-w-[720px]">
+                    <thead className="bg-gray-50 text-gray-600">
+                      <tr>
+                        <th className="text-right px-3 py-2 font-medium">الاتجاه</th>
+                        <th className="text-right px-3 py-2 font-medium">من / إلى</th>
+                        <th className="text-right px-3 py-2 font-medium">المبلغ</th>
+                        <th className="text-right px-3 py-2 font-medium">التاريخ</th>
+                        <th className="w-12 px-2 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {txTransfers.length === 0 ? (
+                        <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">لا توجد تحويلات</td></tr>
+                      ) : txTransfers.map((t: any) => {
+                        const out = t.from_account_id === id
+                        return (
+                          <tr key={t.id} className="hover:bg-gray-50/80">
+                            <td className="px-3 py-2">
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${out ? 'bg-orange-100 text-orange-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                {out ? 'صادر' : 'وارد'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              من {accName(t.from_account_id)} — إلى {accName(t.to_account_id)}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {formatMoney(Number(t.amount), accounts.find(a => a.id === t.from_account_id)?.currency ?? 'BHD')}{' '}
+                              {accounts.find(a => a.id === t.from_account_id)?.currency ?? 'BHD'}
+                            </td>
+                            <td className="px-3 py-2">{t.transfer_date ?? '—'}</td>
+                            <td className="px-2 py-2">
+                              <button type="button" onClick={() => openEdit('transfer', t)} className="p-1.5 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50" title="تعديل">
+                                <Edit2 size={15} />
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </div>
+
+      {edit && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" onClick={() => setEdit(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3" dir="rtl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-800">
+              {edit.kind === 'receipt' ? 'تعديل إيصال' : edit.kind === 'expense' ? 'تعديل مصروف' : 'تعديل تحويل'}
+            </h3>
+            <LabelInput label="المبلغ *" type="number" value={fAmount} onChange={setFAmount} />
+            <LabelInput label={edit.kind === 'expense' ? 'تاريخ المصروف *' : edit.kind === 'receipt' ? 'تاريخ الدفع *' : 'تاريخ التحويل *'} type="date" value={fDate} onChange={setFDate} />
+            <LabelInput label="ملاحظات" value={fNotes} onChange={setFNotes} />
+            {edit.kind === 'transfer' && (
+              <>
+                <LabelSelect label="من حساب *" value={fFrom} onChange={setFFrom}
+                  options={accounts.map(a => ({ value: a.id, label: a.name }))} />
+                <LabelSelect label="إلى حساب *" value={fTo} onChange={setFTo}
+                  options={accounts.map(a => ({ value: a.id, label: a.name }))} />
+              </>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="button" disabled={saving} onClick={submitEdit}
+                className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
+                {saving ? 'جارٍ الحفظ...' : 'حفظ'}
+              </button>
+              <button type="button" onClick={() => setEdit(null)} className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 const ic = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500'
 
-function LabelInput({ label, value, onChange, type = 'text' }: any) {
-  return <div><label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-    <input className={ic} type={type} value={value} onChange={(e: any) => onChange(e.target.value)} /></div>
+function LabelInput({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <input className={ic} type={type} value={value} onChange={e => onChange(e.target.value)} />
+    </div>
+  )
 }
 
-function LabelSelect({ label, value, onChange, options }: any) {
-  return <div><label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-    <select className={ic} value={value} onChange={(e: any) => onChange(e.target.value)}>
-      <option value="">— اختر —</option>
-      {options.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select></div>
+function LabelSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <select className={ic} value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">— اختر —</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  )
 }
 
-function SimpleModal({ title, children, onClose, onSave, saving }: any) {
+function SimpleModal({ title, children, onClose, onSave, saving }: { title: string; children: React.ReactNode; onClose: () => void; onSave: () => void; saving: boolean }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3" dir="rtl">
