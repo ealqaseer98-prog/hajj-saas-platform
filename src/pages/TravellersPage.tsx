@@ -552,6 +552,9 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
           <Field label="رقم جواز السفر">
             <input className={ic} value={data.passport_number ?? ''} onChange={f('passport_number')} dir="ltr" />
           </Field>
+          <Field label="تاريخ إصدار الجواز">
+            <input className={ic} type="date" value={data.passport_issue_date ?? ''} onChange={f('passport_issue_date')} />
+          </Field>
           <Field label="تاريخ انتهاء الجواز">
             <input className={ic} type="date" value={data.passport_expiry ?? ''} onChange={f('passport_expiry')} />
           </Field>

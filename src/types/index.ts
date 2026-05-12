@@ -26,6 +26,7 @@ export interface Traveller {
   phone:           string | null
   email:           string | null
   passport_number: string | null
+  passport_issue_date: string | null
   passport_expiry: string | null
   nationality:     string
   date_of_birth:   string | null
