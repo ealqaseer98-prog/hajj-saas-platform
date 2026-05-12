@@ -135,6 +135,7 @@ function InvoicesTab() {
   const searchTerm = search.trim().toLowerCase()
   const filteredInvoices = searchTerm
     ? invoices.filter((i: any) =>
+      String(i.invoice_number ?? '').toLowerCase().includes(searchTerm) ||
       (i.traveller?.full_name_ar ?? '').toLowerCase().includes(searchTerm) ||
       (i.traveller?.cpr_number ?? '').toLowerCase().includes(searchTerm))
     : invoices
@@ -189,7 +190,7 @@ function InvoicesTab() {
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
         <input
           className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+          placeholder="ابحث برقم الفاتورة أو اسم الحاج أو رقم البطاقة..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -331,6 +332,7 @@ function ReceiptsTab() {
   const searchTerm = search.trim().toLowerCase()
   const filteredReceipts = searchTerm
     ? receipts.filter((r: any) =>
+      String(r.receipt_number ?? '').toLowerCase().includes(searchTerm) ||
       (r.traveller?.full_name_ar ?? '').toLowerCase().includes(searchTerm) ||
       (r.traveller?.cpr_number ?? '').toLowerCase().includes(searchTerm))
     : receipts
@@ -422,7 +424,7 @@ function ReceiptsTab() {
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
         <input
           className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+          placeholder="ابحث برقم الإيصال أو اسم الحاج أو رقم البطاقة..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -558,8 +560,8 @@ function ExpensesTab() {
   const searchTerm = search.trim().toLowerCase()
   const filteredExpenses = searchTerm
     ? expenses.filter((e: any) =>
-      (e.traveller?.full_name_ar ?? '').toLowerCase().includes(searchTerm) ||
-      (e.traveller?.cpr_number ?? '').toLowerCase().includes(searchTerm))
+      String(e.expense_number ?? '').toLowerCase().includes(searchTerm) ||
+      String(e.description ?? '').toLowerCase().includes(searchTerm))
     : expenses
   const travellerSearchTerm = travellerSearch.trim().toLowerCase()
   const matchingTravellers = travellerSearchTerm
@@ -674,7 +676,7 @@ function ExpensesTab() {
         <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
         <input
           className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          placeholder="ابحث باسم الحاج أو رقم البطاقة..."
+          placeholder="ابحث برقم المصروف أو الوصف..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
