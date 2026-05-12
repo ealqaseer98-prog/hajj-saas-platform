@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, ArrowLeftRight, TrendingUp, List, X, Edit2, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, ArrowLeftRight, TrendingUp, List, X, Edit2, Trash2 } from 'lucide-react'
 import type { Account } from '../types'
 
 function formatMoney(value: number, currency: string | undefined) {
@@ -11,65 +11,6 @@ function formatMoney(value: number, currency: string | undefined) {
     return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   }
   return Number(value).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
-}
-
-/** Sets balance = opening_balance + Σ(receipts) − Σ(expenses) + Σ(transfers in) − Σ(transfers out). Never uses current balance. */
-async function recalculateAllAccountBalances() {
-  const { data: accountRows, error: accErr } = await supabase.from('accounts').select('id, opening_balance')
-  if (accErr) throw accErr
-
-  const ids = new Set<string>()
-  const openingById = new Map<string, number>()
-  for (const row of accountRows ?? []) {
-    const { id, opening_balance } = row as { id: string; opening_balance: number | null }
-    ids.add(id)
-    openingById.set(id, Number(opening_balance ?? 0))
-  }
-
-  const sumReceipts = new Map<string, number>()
-  const sumExpenses = new Map<string, number>()
-  const sumTransferIn = new Map<string, number>()
-  const sumTransferOut = new Map<string, number>()
-
-  const { data: receipts, error: rErr } = await supabase.from('receipts').select('account_id, amount')
-  if (rErr) throw rErr
-  for (const row of receipts ?? []) {
-    const aid = row.account_id as string | null
-    if (!aid || !ids.has(aid)) continue
-    sumReceipts.set(aid, (sumReceipts.get(aid) ?? 0) + Number(row.amount ?? 0))
-  }
-
-  const { data: expenses, error: eErr } = await supabase.from('expenses').select('account_id, amount')
-  if (eErr) throw eErr
-  for (const row of expenses ?? []) {
-    const aid = row.account_id as string | null
-    if (!aid || !ids.has(aid)) continue
-    sumExpenses.set(aid, (sumExpenses.get(aid) ?? 0) + Number(row.amount ?? 0))
-  }
-
-  const { data: transfers, error: tErr } = await supabase
-    .from('account_transfers')
-    .select('from_account_id, to_account_id, amount')
-  if (tErr) throw tErr
-  for (const row of transfers ?? []) {
-    const amt = Number(row.amount ?? 0)
-    const fromId = row.from_account_id as string
-    const toId = row.to_account_id as string
-    if (ids.has(fromId)) sumTransferOut.set(fromId, (sumTransferOut.get(fromId) ?? 0) + amt)
-    if (ids.has(toId)) sumTransferIn.set(toId, (sumTransferIn.get(toId) ?? 0) + amt)
-  }
-
-  await Promise.all(
-    [...ids].map(accountId => {
-      const opening = openingById.get(accountId) ?? 0
-      const r = sumReceipts.get(accountId) ?? 0
-      const e = sumExpenses.get(accountId) ?? 0
-      const tin = sumTransferIn.get(accountId) ?? 0
-      const tout = sumTransferOut.get(accountId) ?? 0
-      const newBalance = opening + r - e + tin - tout
-      return supabase.from('accounts').update({ balance: newBalance }).eq('id', accountId).throwOnError()
-    })
-  )
 }
 
 export default function AccountsPage() {
@@ -126,16 +67,6 @@ export default function AccountsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['accounts-list'] }); setIncome(false) },
   })
 
-  const refreshBalances = useMutation({
-    mutationFn: async () => {
-      await recalculateAllAccountBalances()
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['accounts-list'] })
-      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
-    },
-  })
-
   return (
     <div className="p-6 space-y-5" dir="rtl">
       <div className="flex items-center justify-between">
@@ -146,14 +77,6 @@ export default function AccountsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
-          <button
-            type="button"
-            onClick={() => refreshBalances.mutate()}
-            disabled={refreshBalances.isPending}
-            className="flex items-center gap-2 border border-amber-500 text-amber-800 hover:bg-amber-50 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-          >
-            <RefreshCw size={15} className={refreshBalances.isPending ? 'animate-spin' : ''} /> تحديث الأرصدة
-          </button>
           <button onClick={() => setIncome(true)}
             className="flex items-center gap-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 px-3 py-2 rounded-lg text-sm font-medium">
             <TrendingUp size={15} /> إيداع
