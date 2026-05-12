@@ -377,6 +377,8 @@ function AccountTransactionsModal({
       invalidateAccountsBalances()
     },
   })
+
+  const confirmDeleteReceipt = (r: any) => {
     if (!window.confirm('حذف هذا الإيصال؟')) return
     deleteReceipt.mutate(r.id)
   }
