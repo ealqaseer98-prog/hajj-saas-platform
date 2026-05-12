@@ -16,6 +16,7 @@ export type ExpenseCategory = 'hotel' | 'transport' | 'food' | 'visa' | 'other'
 export interface Traveller {
   id:              string
   cpr_number:      string
+  permit_number:   string | null
   full_name_ar:    string
   full_name_en:    string
   group_name:      string | null

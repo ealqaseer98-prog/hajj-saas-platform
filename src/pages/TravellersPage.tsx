@@ -533,6 +533,9 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
           <Field label="رقم البطاقة الشخصية (CPR) *" required>
             <input className={ic} value={data.cpr_number ?? ''} onChange={f('cpr_number')} dir="ltr" />
           </Field>
+          <Field label="رقم التصريح">
+            <input className={ic} value={data.permit_number ?? ''} onChange={f('permit_number')} dir="ltr" />
+          </Field>
           <Field label="الجنس *" required>
             <select className={ic} value={data.gender ?? ''} onChange={f('gender')}>
               <option value="">— اختر —</option>
