@@ -13,28 +13,38 @@ function formatMoney(value: number, currency: string | undefined) {
   return Number(value).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
 
-/** Sets balance = opening_balance + Σ(receipts) − Σ(expenses) + transfers_in − transfers_out per account. */
+/** Sets balance = opening_balance + Σ(receipts) − Σ(expenses) + Σ(transfers in) − Σ(transfers out). Never uses current balance. */
 async function recalculateAllAccountBalances() {
   const { data: accountRows, error: accErr } = await supabase.from('accounts').select('id, opening_balance')
   if (accErr) throw accErr
-  const balances = new Map<string, number>()
+
+  const ids = new Set<string>()
+  const openingById = new Map<string, number>()
   for (const row of accountRows ?? []) {
     const { id, opening_balance } = row as { id: string; opening_balance: number | null }
-    balances.set(id, Number(opening_balance ?? 0))
+    ids.add(id)
+    openingById.set(id, Number(opening_balance ?? 0))
   }
+
+  const sumReceipts = new Map<string, number>()
+  const sumExpenses = new Map<string, number>()
+  const sumTransferIn = new Map<string, number>()
+  const sumTransferOut = new Map<string, number>()
 
   const { data: receipts, error: rErr } = await supabase.from('receipts').select('account_id, amount')
   if (rErr) throw rErr
   for (const row of receipts ?? []) {
     const aid = row.account_id as string | null
-    if (aid) balances.set(aid, (balances.get(aid) ?? 0) + Number(row.amount ?? 0))
+    if (!aid || !ids.has(aid)) continue
+    sumReceipts.set(aid, (sumReceipts.get(aid) ?? 0) + Number(row.amount ?? 0))
   }
 
   const { data: expenses, error: eErr } = await supabase.from('expenses').select('account_id, amount')
   if (eErr) throw eErr
   for (const row of expenses ?? []) {
     const aid = row.account_id as string | null
-    if (aid) balances.set(aid, (balances.get(aid) ?? 0) - Number(row.amount ?? 0))
+    if (!aid || !ids.has(aid)) continue
+    sumExpenses.set(aid, (sumExpenses.get(aid) ?? 0) + Number(row.amount ?? 0))
   }
 
   const { data: transfers, error: tErr } = await supabase
@@ -45,14 +55,20 @@ async function recalculateAllAccountBalances() {
     const amt = Number(row.amount ?? 0)
     const fromId = row.from_account_id as string
     const toId = row.to_account_id as string
-    balances.set(fromId, (balances.get(fromId) ?? 0) - amt)
-    balances.set(toId, (balances.get(toId) ?? 0) + amt)
+    if (ids.has(fromId)) sumTransferOut.set(fromId, (sumTransferOut.get(fromId) ?? 0) + amt)
+    if (ids.has(toId)) sumTransferIn.set(toId, (sumTransferIn.get(toId) ?? 0) + amt)
   }
 
   await Promise.all(
-    [...balances.entries()].map(([accountId, balance]) =>
-      supabase.from('accounts').update({ balance }).eq('id', accountId).throwOnError()
-    )
+    [...ids].map(accountId => {
+      const opening = openingById.get(accountId) ?? 0
+      const r = sumReceipts.get(accountId) ?? 0
+      const e = sumExpenses.get(accountId) ?? 0
+      const tin = sumTransferIn.get(accountId) ?? 0
+      const tout = sumTransferOut.get(accountId) ?? 0
+      const newBalance = opening + r - e + tin - tout
+      return supabase.from('accounts').update({ balance: newBalance }).eq('id', accountId).throwOnError()
+    })
   )
 }
 
