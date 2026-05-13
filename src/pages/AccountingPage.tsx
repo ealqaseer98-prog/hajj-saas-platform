@@ -23,7 +23,10 @@ function invoiceTotalsByCurrency(rows: any[]) {
     paid: rows.filter((i: any) => (i.currency ?? 'BHD') === c).reduce((s: number, i: any) => s + Number(i.amount_paid ?? 0), 0),
     outstanding: rows
       .filter((i: any) => (i.currency ?? 'BHD') === c)
-      .reduce((s: number, i: any) => s + (Number(i.amount ?? 0) - Number(i.amount_paid ?? 0)), 0),
+      .reduce(
+        (s: number, i: any) => s + Math.max(0, Number(i.amount ?? 0) - Number(i.amount_paid ?? 0)),
+        0
+      ),
   })
   return {
     bhd: sum('BHD'),
@@ -86,6 +89,7 @@ function InvoicesTab() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [viewingInvoice, setViewingInvoice] = useState<any | null>(null)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [travellerSearch, setTravellerSearch] = useState('')
 
   const { data: invoices = [] } = useQuery({
@@ -148,12 +152,17 @@ function InvoicesTab() {
   const selectedCurrency = (sel.currency ?? 'BHD') as Currency
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
   const searchTerm = search.trim().toLowerCase()
-  const filteredInvoices = searchTerm
-    ? invoices.filter((i: any) =>
-      String(i.invoice_number ?? '').toLowerCase().includes(searchTerm) ||
-      (i.traveller?.full_name_ar ?? '').toLowerCase().includes(searchTerm) ||
-      (i.traveller?.cpr_number ?? '').toLowerCase().includes(searchTerm))
-    : invoices
+  const filteredInvoices = invoices.filter((i: any) => {
+    if (searchTerm) {
+      const matchSearch =
+        String(i.invoice_number ?? '').toLowerCase().includes(searchTerm) ||
+        (i.traveller?.full_name_ar ?? '').toLowerCase().includes(searchTerm) ||
+        (i.traveller?.cpr_number ?? '').toLowerCase().includes(searchTerm)
+      if (!matchSearch) return false
+    }
+    if (statusFilter !== 'all' && (i.status ?? 'unpaid') !== statusFilter) return false
+    return true
+  })
   const travellerSearchTerm = travellerSearch.trim().toLowerCase()
   const matchingTravellers = travellerSearchTerm
     ? travellers.filter((t: any) =>
@@ -163,21 +172,28 @@ function InvoicesTab() {
   const printInvoice = (inv: any) => {
     const amount = Number(inv.amount ?? 0)
     const amountPaid = Number(inv.amount_paid ?? 0)
-    const remaining = amount - amountPaid
-    openPrintWindow({
-      docType: 'فاتورة',
-      rows: [
+    const remaining = Math.max(0, amount - amountPaid)
+    const excess = amountPaid > amount ? amountPaid - amount : 0
+    const rows: [string, string][] = [
         ['رقم الفاتورة', inv.invoice_number ?? '—'],
         ['اسم الحاج', inv.traveller?.full_name_ar ?? '—'],
         ['الباقة', inv.traveller?.package_type ? (PACKAGE_TYPE_LABELS[inv.traveller.package_type] ?? inv.traveller.package_type) : '—'],
         ['المبلغ', `${formatCurrencyAmount(amount, inv.currency)} ${inv.currency ?? 'BHD'}`],
         ['المدفوع', `${formatCurrencyAmount(amountPaid, inv.currency)} ${inv.currency ?? 'BHD'}`],
         ['المتبقي', `${formatCurrencyAmount(remaining, inv.currency)} ${inv.currency ?? 'BHD'}`],
+    ]
+    if (excess > 0) {
+      rows.push(['المبلغ الزائد', `${formatCurrencyAmount(excess, inv.currency)} ${inv.currency ?? 'BHD'}`])
+    }
+    rows.push(
         ['الوصف', inv.description ?? '—'],
         ['تاريخ الإصدار', inv.issue_date ?? '—'],
         ['تاريخ الاستحقاق', inv.due_date ?? '—'],
         ['الحالة', STATUS_TEXT[inv.status as string] ?? inv.status ?? '—'],
-      ],
+    )
+    openPrintWindow({
+      docType: 'فاتورة',
+      rows,
     })
   }
 
@@ -214,14 +230,31 @@ function InvoicesTab() {
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-        <input
-          className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          placeholder="ابحث برقم الفاتورة أو اسم الحاج أو رقم البطاقة..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          <input
+            className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            placeholder="ابحث برقم الفاتورة أو اسم الحاج أو رقم البطاقة..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="sm:w-48 shrink-0">
+          <label className="block text-xs font-medium text-gray-600 mb-1">الحالة</label>
+          <select
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+          >
+            <option value="all">كل الحالات</option>
+            <option value="unpaid">غير مدفوعة</option>
+            <option value="partial">جزئية</option>
+            <option value="paid">مدفوعة</option>
+            <option value="overpaid">دفع زائد</option>
+            <option value="cancelled">ملغاة</option>
+          </select>
+        </div>
       </div>
 
       <AccountingTable
@@ -259,23 +292,37 @@ function InvoicesTab() {
         onDelete={id => window.confirm('حذف الفاتورة؟') && del.mutate(filteredInvoices[id].id)}
       />
 
-      {viewingInvoice && (
+      {viewingInvoice && (() => {
+        const vAmt = Number(viewingInvoice.amount ?? 0)
+        const vPaid = Number(viewingInvoice.amount_paid ?? 0)
+        const vRemaining = Math.max(0, vAmt - vPaid)
+        const vExcess = vPaid > vAmt ? vPaid - vAmt : 0
+        const vCur = viewingInvoice.currency ?? 'BHD'
+        return (
         <ViewDetailsModal title="تفاصيل الفاتورة" onClose={() => setViewingInvoice(null)}>
           <DetailRow label="رقم الفاتورة" value={viewingInvoice.invoice_number ?? '—'} />
           <DetailRow label="اسم الحاج" value={viewingInvoice.traveller?.full_name_ar ?? '—'} />
           <DetailRow label="رقم البطاقة" value={viewingInvoice.traveller?.cpr_number ?? '—'} />
           <DetailRow label="الباقة" value={viewingInvoice.traveller?.package_type ? (PACKAGE_TYPE_LABELS[viewingInvoice.traveller.package_type] ?? viewingInvoice.traveller.package_type) : '—'} />
           <DetailRow label="الوصف" value={viewingInvoice.description ?? '—'} />
-          <DetailRow label="المبلغ" value={`${formatCurrencyAmount(Number(viewingInvoice.amount ?? 0), viewingInvoice.currency)} ${viewingInvoice.currency ?? 'BHD'}`} />
-          <DetailRow label="المدفوع" value={`${formatCurrencyAmount(Number(viewingInvoice.amount_paid ?? 0), viewingInvoice.currency)} ${viewingInvoice.currency ?? 'BHD'}`} />
-          <DetailRow label="المتبقي" value={`${formatCurrencyAmount(Number(viewingInvoice.amount ?? 0) - Number(viewingInvoice.amount_paid ?? 0), viewingInvoice.currency)} ${viewingInvoice.currency ?? 'BHD'}`} />
+          <DetailRow label="المبلغ" value={`${formatCurrencyAmount(vAmt, vCur)} ${vCur}`} />
+          <DetailRow label="المدفوع" value={`${formatCurrencyAmount(vPaid, vCur)} ${vCur}`} />
+          <DetailRow label="المتبقي" value={`${formatCurrencyAmount(vRemaining, vCur)} ${vCur}`} />
+          {vExcess > 0 && (
+            <div className="border border-purple-200 rounded-lg p-3 bg-purple-50">
+              <p className="text-sm text-purple-800 font-medium break-words">
+                المبلغ الزائد: {formatCurrencyAmount(vExcess, vCur)} {vCur}
+              </p>
+            </div>
+          )}
           <DetailRow label="الحالة" value={STATUS_TEXT[viewingInvoice.status as string] ?? viewingInvoice.status ?? '—'} />
           <DetailRow label="تاريخ الإصدار" value={viewingInvoice.issue_date ?? '—'} />
           <DetailRow label="تاريخ الاستحقاق" value={viewingInvoice.due_date ?? '—'} />
           <DetailRow label="طريقة الدفع" value={PAYMENT_LABELS[viewingInvoice.receipts?.[0]?.payment_method as string] ?? viewingInvoice.receipts?.[0]?.payment_method ?? '—'} />
           <DetailRow label="ملاحظات" value={viewingInvoice.notes ?? '—'} />
         </ViewDetailsModal>
-      )}
+        )
+      })()}
 
       {modal && (
         <Modal title={editingId ? 'تعديل الفاتورة' : 'فاتورة جديدة'} onClose={() => { setModal(false); setEditingId(null) }} onSave={() => save.mutate({ data: sel, editId: editingId })} saving={save.isPending}>
@@ -351,7 +398,7 @@ function ReceiptsTab() {
 
   const { data: travellers = [] } = useQuery({ queryKey: ['travellers-list'], queryFn: fetchTravellers })
   const { data: invoices = [] }   = useQuery({ queryKey: ['invoices-list'], queryFn: async () => {
-    const { data } = await supabase.from('invoices').select('id, invoice_number').neq('status', 'paid')
+    const { data } = await supabase.from('invoices').select('id, invoice_number').in('status', ['unpaid', 'partial'])
     return (data ?? []) as any[]
   }})
   const { data: accounts = [] }   = useQuery({ queryKey: ['accounts-list'], queryFn: fetchAccounts })
@@ -891,7 +938,13 @@ function ExpensesTab() {
 // ── Shared helpers ────────────────────────────────────────────────────────────
 const PAYMENT_LABELS: Record<string, string> = { cash: 'نقدي', bank_transfer: 'تحويل بنكي', cheque: 'شيك' }
 const CATEGORY_LABELS: Record<string, string> = { hotel: 'فندق', transport: 'مواصلات', food: 'طعام', visa: 'تصريح', other: 'أخرى' }
-const STATUS_TEXT: Record<string, string> = { paid: 'مدفوعة', unpaid: 'غير مدفوعة', partial: 'جزئية', cancelled: 'ملغاة' }
+const STATUS_TEXT: Record<string, string> = {
+  paid: 'مدفوعة',
+  unpaid: 'غير مدفوعة',
+  partial: 'جزئية',
+  overpaid: 'دفع زائد',
+  cancelled: 'ملغاة',
+}
 
 function today() { return new Date().toISOString().slice(0, 10) }
 
@@ -1071,10 +1124,19 @@ async function nextNumber(table: string, column: string, prefix: string): Promis
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    paid: 'bg-green-100 text-green-800', unpaid: 'bg-red-100 text-red-800',
-    partial: 'bg-yellow-100 text-yellow-800', cancelled: 'bg-gray-100 text-gray-600',
+    paid: 'bg-green-100 text-green-800',
+    unpaid: 'bg-red-100 text-red-800',
+    partial: 'bg-yellow-100 text-yellow-800',
+    overpaid: 'bg-purple-100 text-purple-800',
+    cancelled: 'bg-gray-100 text-gray-600',
   }
-  const lbl: Record<string, string> = { paid: 'مدفوعة', unpaid: 'غير مدفوعة', partial: 'جزئي', cancelled: 'ملغاة' }
+  const lbl: Record<string, string> = {
+    paid: 'مدفوعة',
+    unpaid: 'غير مدفوعة',
+    partial: 'جزئي',
+    overpaid: 'دفع زائد',
+    cancelled: 'ملغاة',
+  }
   return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? ''}`}>{lbl[status] ?? status}</span>
 }
 

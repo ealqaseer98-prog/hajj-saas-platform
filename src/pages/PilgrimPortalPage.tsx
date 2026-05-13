@@ -330,7 +330,7 @@ export default function PilgrimPortalPage() {
                     <XCircle size={32} className="mx-auto text-red-400 mb-2" />
                     <p className="text-sm text-gray-500">لم يتم تسجيل أضحية</p>
                   </div>
-                ) : adahiInv.status === 'paid' ? (
+                ) : adahiInv.status === 'paid' || adahiInv.status === 'overpaid' ? (
                   <div>
                     <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-3">
                       <CheckCircle2 size={20} className="text-green-600" />
