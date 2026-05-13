@@ -1,6 +1,6 @@
 // src/pages/AccountingPage.tsx
 // Full accounting page: Invoices | Receipts | Expenses tabs
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search, Eye, RefreshCw, FileDown } from 'lucide-react'
@@ -397,10 +397,23 @@ function ReceiptsTab() {
   })
 
   const { data: travellers = [] } = useQuery({ queryKey: ['travellers-list'], queryFn: fetchTravellers })
-  const { data: invoices = [] }   = useQuery({ queryKey: ['invoices-list'], queryFn: async () => {
-    const { data } = await supabase.from('invoices').select('id, invoice_number').in('status', ['unpaid', 'partial'])
-    return (data ?? []) as any[]
-  }})
+  const receiptModalTravellerId = (sel.traveller_id ?? '').toString().trim()
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['invoices-list', 'receipt-modal', receiptModalTravellerId || 'all'],
+    queryFn: async () => {
+      let q = supabase
+        .from('invoices')
+        .select('id, invoice_number')
+        .in('status', ['unpaid', 'partial'])
+      if (receiptModalTravellerId) {
+        q = q.eq('traveller_id', receiptModalTravellerId)
+      }
+      const { data, error } = await q.order('issue_date', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as any[]
+    },
+    enabled: modal,
+  })
   const { data: accounts = [] }   = useQuery({ queryKey: ['accounts-list'], queryFn: fetchAccounts })
   const selectedCurrency = (sel.currency ?? 'BHD') as Currency
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
@@ -417,6 +430,14 @@ function ReceiptsTab() {
       (t.full_name_ar ?? '').toLowerCase().includes(travellerSearchTerm) ||
       (t.cpr_number ?? '').toLowerCase().includes(travellerSearchTerm))
     : travellers
+
+  useEffect(() => {
+    if (!modal || !sel.invoice_id) return
+    const ids = new Set(invoices.map((i: any) => i.id))
+    if (!ids.has(sel.invoice_id)) {
+      setSel(s => ({ ...s, invoice_id: '' }))
+    }
+  }, [modal, invoices, sel.invoice_id])
 
   const save = useMutation({
     mutationFn: async ({ data, receipt }: { data: Partial<Receipt>; receipt: any | null }) => {
@@ -442,6 +463,7 @@ function ReceiptsTab() {
       qc.invalidateQueries({ queryKey: ['receipts', 'invoices', 'accounts-list'] })
       qc.invalidateQueries({ queryKey: ['receipts'] })
       qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['invoices-list'] })
       qc.invalidateQueries({ queryKey: ['accounts-list'] })
       qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
       setModal(false)
@@ -562,7 +584,7 @@ function ReceiptsTab() {
             <input
               className={ic}
               value={travellerSearch}
-              onChange={e => { setTravellerSearch(e.target.value); setSel(s => ({ ...s, traveller_id: '' })) }}
+              onChange={e => { setTravellerSearch(e.target.value); setSel(s => ({ ...s, traveller_id: '', invoice_id: '' })) }}
               placeholder="ابحث باسم الحاج أو رقم البطاقة..."
             />
             {travellerSearch.trim() && (
@@ -572,7 +594,7 @@ function ReceiptsTab() {
                     key={t.id}
                     type="button"
                     onClick={() => {
-                      setSel(s => ({ ...s, traveller_id: t.id }))
+                      setSel(s => ({ ...s, traveller_id: t.id, invoice_id: '' }))
                       setTravellerSearch(`${t.full_name_ar} — ${t.cpr_number ?? '—'}`)
                     }}
                     className="w-full text-right px-3 py-2 text-sm hover:bg-gray-50"
