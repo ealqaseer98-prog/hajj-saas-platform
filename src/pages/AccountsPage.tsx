@@ -54,12 +54,12 @@ export default function AccountsPage() {
       if (!fromAcc || !toAcc) throw new Error('تعذر تحديد الحسابات')
       const fromAmount = Number(xfer.amount)
       if (!Number.isFinite(fromAmount) || fromAmount <= 0) throw new Error('أدخل مبلغاً صالحاً أكبر من صفر')
-      const needsFx = fromAcc.currency !== toAcc.currency
-      const exchangeRate = needsFx ? Number(xfer.exchangeRate) : 1
-      if (needsFx && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
-        throw new Error('أدخل سعر تحويل صالحاً أكبر من صفر')
-      }
+
+      const differentCurrency = fromAcc.currency !== toAcc.currency
+      let exchangeRate = differentCurrency ? Number(String(xfer.exchangeRate).trim()) : 1
+      if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) exchangeRate = 1
       const toAmount = fromAmount * exchangeRate
+
       await supabase.from('account_transfers').insert({
         from_account_id: xfer.from,
         to_account_id: xfer.to,
@@ -69,6 +69,19 @@ export default function AccountsPage() {
         notes: xfer.notes.trim() || null,
         transfer_date: new Date().toISOString().slice(0, 10),
       }).throwOnError()
+
+      const { data: fromRow } = await supabase.from('accounts').select('balance').eq('id', xfer.from).single().throwOnError()
+      const { data: toRow } = await supabase.from('accounts').select('balance').eq('id', xfer.to).single().throwOnError()
+      await supabase
+        .from('accounts')
+        .update({ balance: Number(fromRow?.balance ?? 0) - fromAmount })
+        .eq('id', xfer.from)
+        .throwOnError()
+      await supabase
+        .from('accounts')
+        .update({ balance: Number(toRow?.balance ?? 0) + toAmount })
+        .eq('id', xfer.to)
+        .throwOnError()
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['accounts-list'] })
@@ -177,9 +190,10 @@ export default function AccountsPage() {
         const fromAcc = accounts.find(a => a.id === xfer.from)
         const toAcc = accounts.find(a => a.id === xfer.to)
         const needsFx = !!(fromAcc && toAcc && fromAcc.currency !== toAcc.currency)
-        const rate = needsFx ? Number(xfer.exchangeRate) : 1
+        let effRate = needsFx ? Number(String(xfer.exchangeRate).trim()) : 1
+        if (!Number.isFinite(effRate) || effRate <= 0) effRate = 1
         const fromAmount = Number(xfer.amount)
-        const toAmount = Number.isFinite(fromAmount) && Number.isFinite(rate) ? fromAmount * rate : NaN
+        const toAmount = Number.isFinite(fromAmount) ? fromAmount * effRate : NaN
         return (
           <SimpleModal title="تحويل بين الحسابات" onClose={() => setTransfer(false)}
             onSave={() => transfer.mutate()} saving={transfer.isPending}>
@@ -372,6 +386,27 @@ function AccountTransactionsModal({
 
   const deleteTransfer = useMutation({
     mutationFn: async (transferId: string) => {
+      const { data: row, error: fetchErr } = await supabase
+        .from('account_transfers')
+        .select('from_account_id, to_account_id, amount, to_amount')
+        .eq('id', transferId)
+        .single()
+      if (fetchErr) throw fetchErr
+      if (!row) return
+      const debit = Number((row as any).amount ?? 0)
+      const credit = Number((row as any).to_amount ?? (row as any).amount ?? 0)
+      const { data: fromRow } = await supabase.from('accounts').select('balance').eq('id', (row as any).from_account_id).single().throwOnError()
+      const { data: toRow } = await supabase.from('accounts').select('balance').eq('id', (row as any).to_account_id).single().throwOnError()
+      await supabase
+        .from('accounts')
+        .update({ balance: Number(fromRow?.balance ?? 0) + debit })
+        .eq('id', (row as any).from_account_id)
+        .throwOnError()
+      await supabase
+        .from('accounts')
+        .update({ balance: Number(toRow?.balance ?? 0) - credit })
+        .eq('id', (row as any).to_account_id)
+        .throwOnError()
       await supabase.from('account_transfers').delete().eq('id', transferId).throwOnError()
     },
     onSuccess: () => {
