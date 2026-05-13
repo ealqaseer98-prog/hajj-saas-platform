@@ -403,7 +403,7 @@ function ReceiptsTab() {
     queryFn: async () => {
       let q = supabase
         .from('invoices')
-        .select('id, invoice_number')
+        .select('id, invoice_number, amount, amount_paid, currency')
         .in('status', ['unpaid', 'partial'])
       if (receiptModalTravellerId) {
         q = q.eq('traveller_id', receiptModalTravellerId)
@@ -435,9 +435,13 @@ function ReceiptsTab() {
     if (!modal || !sel.invoice_id) return
     const ids = new Set(invoices.map((i: any) => i.id))
     if (!ids.has(sel.invoice_id)) {
-      setSel(s => ({ ...s, invoice_id: '' }))
+      setSel(s => ({ ...s, invoice_id: '', amount: undefined }))
     }
   }, [modal, invoices, sel.invoice_id])
+
+  const receiptModalInvoice = sel.invoice_id
+    ? invoices.find((i: any) => i.id === sel.invoice_id)
+    : undefined
 
   const save = useMutation({
     mutationFn: async ({ data, receipt }: { data: Partial<Receipt>; receipt: any | null }) => {
@@ -606,8 +610,41 @@ function ReceiptsTab() {
             )}
           </div>
           <Select label="الفاتورة" value={sel.invoice_id ?? ''}
-            onChange={v => setSel(s => ({ ...s, invoice_id: v }))}
+            onChange={v => {
+              if (!v) {
+                setSel(s => ({ ...s, invoice_id: '', amount: undefined }))
+                return
+              }
+              const inv = invoices.find((i: any) => i.id === v)
+              const remaining = Math.max(0, Number(inv?.amount ?? 0) - Number(inv?.amount_paid ?? 0))
+              setSel(s => ({ ...s, invoice_id: v, amount: remaining }))
+            }}
             options={invoices.map((i: any) => ({ value: i.id, label: i.invoice_number }))} />
+          {receiptModalInvoice && (() => {
+            const inv = receiptModalInvoice
+            const cur = (inv.currency ?? 'BHD') as Currency
+            const total = Number(inv.amount ?? 0)
+            const paid = Number(inv.amount_paid ?? 0)
+            const remaining = total - paid
+            return (
+              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm space-y-1 -mt-1 mb-1">
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-600">المبلغ الإجمالي:</span>
+                  <span className="font-medium tabular-nums">{formatCurrencyAmount(total, cur)} {cur}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-600">المدفوع:</span>
+                  <span className="font-medium tabular-nums">{formatCurrencyAmount(paid, cur)} {cur}</span>
+                </div>
+                <div className="flex justify-between gap-2 pt-0.5 border-t border-gray-200/80">
+                  <span className="text-gray-600">المتبقي:</span>
+                  <span className={`font-semibold tabular-nums ${remaining > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {formatCurrencyAmount(remaining, cur)} {cur}
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
           <Select label="العملة *" value={selectedCurrency}
             onChange={v => setSel(s => ({ ...s, currency: v as Currency, account_id: '' }))}
             options={[{ value: 'BHD', label: 'BHD' }, { value: 'SAR', label: 'SAR' }]} />
