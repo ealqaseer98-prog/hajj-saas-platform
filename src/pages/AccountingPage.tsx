@@ -529,7 +529,7 @@ function ReceiptsTab() {
 
 // ── EXPENSES ─────────────────────────────────────────────────────────────────
 function ExpensesTab() {
-  const qc = useQueryClient()
+  const queryClient = useQueryClient()
   const [modal, setModal] = useState(false)
   const [sel, setSel] = useState<Partial<Expense>>({ currency: 'BHD', expense_date: today() })
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -589,7 +589,7 @@ function ExpensesTab() {
       await supabase.from('expenses').insert({ ...data, expense_number: num }).throwOnError()
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['expenses', 'accounts-list'] })
+      queryClient.invalidateQueries({ queryKey: ['expenses', 'accounts-list'] })
       setModal(false)
       setEditingId(null)
       setSel({ currency: 'BHD', expense_date: today() })
@@ -600,7 +600,7 @@ function ExpensesTab() {
     mutationFn: async (id: string) => {
       await supabase.from('expenses').delete().eq('id', id).throwOnError()
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
   })
 
   const totalExpenses = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0)
@@ -660,7 +660,7 @@ function ExpensesTab() {
           <button
             type="button"
             title="تحديث القائمة"
-            onClick={() => qc.invalidateQueries({ queryKey: ['expenses'] })}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['expenses'] })}
             className="flex items-center justify-center p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
           >
             <RefreshCw size={16} />
