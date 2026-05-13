@@ -17,8 +17,23 @@ function formatCurrencyAmount(n: number, currency: Currency | string | undefined
   return Number(n).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
 
-function formatBhdAmount(n: number): string {
-  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+function invoiceTotalsByCurrency(rows: any[]) {
+  const sum = (c: Currency) => ({
+    invoiced: rows.filter((i: any) => (i.currency ?? 'BHD') === c).reduce((s: number, i: any) => s + Number(i.amount ?? 0), 0),
+    paid: rows.filter((i: any) => (i.currency ?? 'BHD') === c).reduce((s: number, i: any) => s + Number(i.amount_paid ?? 0), 0),
+    outstanding: rows
+      .filter((i: any) => (i.currency ?? 'BHD') === c)
+      .reduce((s: number, i: any) => s + (Number(i.amount ?? 0) - Number(i.amount_paid ?? 0)), 0),
+  })
+  return {
+    bhd: sum('BHD'),
+    sar: sum('SAR'),
+    anySar: rows.some((i: any) => (i.currency ?? 'BHD') === 'SAR'),
+  }
+}
+
+function sumAmountsByCurrency(rows: any[], currency: Currency): number {
+  return rows.filter((r: any) => (r.currency ?? 'BHD') === currency).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0)
 }
 
 const COMPANY_TITLE = 'حملة العمار للحج والعمرة'
@@ -129,7 +144,7 @@ function InvoicesTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
   })
 
-  const totalUnpaid = invoices.filter(i => i.status !== 'paid').reduce((s: number, i: any) => s + (i.amount - i.amount_paid), 0)
+  const invTotals = invoiceTotalsByCurrency(invoices)
   const selectedCurrency = (sel.currency ?? 'BHD') as Currency
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
   const searchTerm = search.trim().toLowerCase()
@@ -169,7 +184,20 @@ function InvoicesTab() {
   return (
     <>
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-sm text-red-600 font-medium">المستحق: {formatBhdAmount(totalUnpaid)} BHD</p>
+        <div className="text-sm text-gray-800 font-medium space-y-1 min-w-0 max-w-full">
+          <p>
+            إجمالي بالدينار البحريني: المفوتر {formatCurrencyAmount(invTotals.bhd.invoiced, 'BHD')} BHD — المدفوع{' '}
+            {formatCurrencyAmount(invTotals.bhd.paid, 'BHD')} BHD — المستحق{' '}
+            <span className="text-red-700">{formatCurrencyAmount(invTotals.bhd.outstanding, 'BHD')} BHD</span>
+          </p>
+          {invTotals.anySar && (
+            <p>
+              إجمالي بالريال السعودي: المفوتر {formatCurrencyAmount(invTotals.sar.invoiced, 'SAR')} SAR — المدفوع{' '}
+              {formatCurrencyAmount(invTotals.sar.paid, 'SAR')} SAR — المستحق{' '}
+              <span className="text-red-700">{formatCurrencyAmount(invTotals.sar.outstanding, 'SAR')} SAR</span>
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -396,14 +424,19 @@ function ReceiptsTab() {
     })
   }
 
-  const totalCollectedReceipts = filteredReceipts.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0)
+  const totalBhdReceipts = sumAmountsByCurrency(receipts, 'BHD')
+  const totalSarReceipts = sumAmountsByCurrency(receipts, 'SAR')
+  const anySarReceipts = receipts.some((r: any) => (r.currency ?? 'BHD') === 'SAR')
 
   return (
     <>
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-sm text-red-600 font-medium">
-          إجمالي المبالغ المحصّلة: {formatBhdAmount(totalCollectedReceipts)} BHD
-        </p>
+        <div className="text-sm text-gray-800 font-medium space-y-1 min-w-0 max-w-full">
+          <p>إجمالي بالدينار البحريني: {formatCurrencyAmount(totalBhdReceipts, 'BHD')} BHD</p>
+          {anySarReceipts && (
+            <p>إجمالي بالريال السعودي: {formatCurrencyAmount(totalSarReceipts, 'SAR')} SAR</p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
         <button
           type="button"
@@ -603,7 +636,9 @@ function ExpensesTab() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
   })
 
-  const totalExpenses = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0)
+  const totalBhdExpenses = sumAmountsByCurrency(expenses, 'BHD')
+  const totalSarExpenses = sumAmountsByCurrency(expenses, 'SAR')
+  const anySarExpenses = expenses.some((e: any) => (e.currency ?? 'BHD') === 'SAR')
   const printExpense = (exp: any) => {
     openPrintWindow({
       docType: 'سند مصروف',
@@ -642,7 +677,12 @@ function ExpensesTab() {
   return (
     <>
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-sm text-red-600 font-medium">إجمالي المصروفات: {formatBhdAmount(totalExpenses)} BHD</p>
+        <div className="text-sm text-gray-800 font-medium space-y-1 min-w-0 max-w-full">
+          <p>إجمالي بالدينار البحريني: {formatCurrencyAmount(totalBhdExpenses, 'BHD')} BHD</p>
+          {anySarExpenses && (
+            <p>إجمالي بالريال السعودي: {formatCurrencyAmount(totalSarExpenses, 'SAR')} SAR</p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"

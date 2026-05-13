@@ -178,6 +178,8 @@ export interface AccountTransfer {
   from_account_id:  string
   to_account_id:    string
   amount:           number
+  to_amount:        number
+  exchange_rate:    number
   transfer_date:    string
   notes:            string | null
   created_at:       string

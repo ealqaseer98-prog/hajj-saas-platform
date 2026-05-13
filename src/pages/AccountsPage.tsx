@@ -19,7 +19,7 @@ export default function AccountsPage() {
   const [transferModal, setTransfer] = useState(false)
   const [incomeModal, setIncome] = useState(false)
   const [newAcc, setNewAcc] = useState<Partial<Account>>({ account_type: 'bank', currency: 'BHD' })
-  const [xfer, setXfer] = useState({ from: '', to: '', amount: '', notes: '' })
+  const [xfer, setXfer] = useState({ from: '', to: '', amount: '', exchangeRate: '1', notes: '' })
   const [inc, setInc] = useState({ account_id: '', amount: '', notes: '' })
   const [transactionsForAccount, setTransactionsForAccount] = useState<Account | null>(null)
 
@@ -48,14 +48,44 @@ export default function AccountsPage() {
 
   const transfer = useMutation({
     mutationFn: async () => {
+      if (!xfer.from || !xfer.to || xfer.from === xfer.to) throw new Error('اختر حسابين مختلفين')
+      const fromAcc = accounts.find(a => a.id === xfer.from)
+      const toAcc = accounts.find(a => a.id === xfer.to)
+      if (!fromAcc || !toAcc) throw new Error('تعذر تحديد الحسابات')
+      const fromAmount = Number(xfer.amount)
+      if (!Number.isFinite(fromAmount) || fromAmount <= 0) throw new Error('أدخل مبلغاً صالحاً أكبر من صفر')
+      const needsFx = fromAcc.currency !== toAcc.currency
+      const exchangeRate = needsFx ? Number(xfer.exchangeRate) : 1
+      if (needsFx && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
+        throw new Error('أدخل سعر تحويل صالحاً أكبر من صفر')
+      }
+      const toAmount = fromAmount * exchangeRate
       await supabase.from('account_transfers').insert({
-        from_account_id: xfer.from, to_account_id: xfer.to,
-        amount: +xfer.amount, notes: xfer.notes || null,
+        from_account_id: xfer.from,
+        to_account_id: xfer.to,
+        amount: fromAmount,
+        to_amount: toAmount,
+        exchange_rate: exchangeRate,
+        notes: xfer.notes.trim() || null,
         transfer_date: new Date().toISOString().slice(0, 10),
       }).throwOnError()
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['accounts-list'] }); setTransfer(false) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['accounts-list'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      setTransfer(false)
+      setXfer({ from: '', to: '', amount: '', exchangeRate: '1', notes: '' })
+    },
+    onError: (e: Error) => window.alert(e.message),
   })
+
+  useEffect(() => {
+    const fromAcc = accounts.find(a => a.id === xfer.from)
+    const toAcc = accounts.find(a => a.id === xfer.to)
+    if (fromAcc && toAcc && fromAcc.currency === toAcc.currency) {
+      setXfer(s => (s.exchangeRate === '1' ? s : { ...s, exchangeRate: '1' }))
+    }
+  }, [xfer.from, xfer.to, accounts])
 
   const addIncome = useMutation({
     mutationFn: async () => {
@@ -81,8 +111,13 @@ export default function AccountsPage() {
             className="flex items-center gap-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 px-3 py-2 rounded-lg text-sm font-medium">
             <TrendingUp size={15} /> إيداع
           </button>
-          <button onClick={() => setTransfer(true)}
-            className="flex items-center gap-2 border border-blue-500 text-blue-700 hover:bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium">
+          <button
+            onClick={() => {
+              setXfer({ from: '', to: '', amount: '', exchangeRate: '1', notes: '' })
+              setTransfer(true)
+            }}
+            className="flex items-center gap-2 border border-blue-500 text-blue-700 hover:bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium"
+          >
             <ArrowLeftRight size={15} /> تحويل
           </button>
           <button onClick={() => setAddModal(true)}
@@ -138,21 +173,51 @@ export default function AccountsPage() {
         </SimpleModal>
       )}
 
-      {transferModal && (
-        <SimpleModal title="تحويل بين الحسابات" onClose={() => setTransfer(false)}
-          onSave={() => transfer.mutate()} saving={transfer.isPending}>
-          <LabelSelect label="من حساب" value={xfer.from}
-            onChange={v => setXfer(s => ({ ...s, from: v }))}
-            options={accounts.map(a => ({ value: a.id, label: `${a.name} (${formatMoney(Number(a.balance), a.currency)})` }))} />
-          <LabelSelect label="إلى حساب" value={xfer.to}
-            onChange={v => setXfer(s => ({ ...s, to: v }))}
-            options={accounts.filter(a => a.id !== xfer.from).map(a => ({ value: a.id, label: a.name }))} />
-          <LabelInput label="المبلغ *" type="number" value={xfer.amount}
-            onChange={v => setXfer(s => ({ ...s, amount: v }))} />
-          <LabelInput label="ملاحظات" value={xfer.notes}
-            onChange={v => setXfer(s => ({ ...s, notes: v }))} />
-        </SimpleModal>
-      )}
+      {transferModal && (() => {
+        const fromAcc = accounts.find(a => a.id === xfer.from)
+        const toAcc = accounts.find(a => a.id === xfer.to)
+        const needsFx = !!(fromAcc && toAcc && fromAcc.currency !== toAcc.currency)
+        const rate = needsFx ? Number(xfer.exchangeRate) : 1
+        const fromAmount = Number(xfer.amount)
+        const toAmount = Number.isFinite(fromAmount) && Number.isFinite(rate) ? fromAmount * rate : NaN
+        return (
+          <SimpleModal title="تحويل بين الحسابات" onClose={() => setTransfer(false)}
+            onSave={() => transfer.mutate()} saving={transfer.isPending}>
+            <LabelSelect label="من حساب" value={xfer.from}
+              onChange={v => setXfer(s => ({ ...s, from: v }))}
+              options={accounts.map(a => ({ value: a.id, label: `${a.name} (${formatMoney(Number(a.balance), a.currency)} ${a.currency})` }))} />
+            <LabelSelect label="إلى حساب" value={xfer.to}
+              onChange={v => setXfer(s => ({ ...s, to: v }))}
+              options={accounts.filter(a => a.id !== xfer.from).map(a => ({ value: a.id, label: `${a.name} (${a.currency})` }))} />
+            <LabelInput
+              label={fromAcc ? `المبلغ المحوّل من الحساب المصدر (${fromAcc.currency}) *` : 'المبلغ *'}
+              type="number"
+              value={xfer.amount}
+              onChange={v => setXfer(s => ({ ...s, amount: v }))}
+            />
+            {needsFx && (
+              <>
+                <LabelInput
+                  label={`سعر التحويل (المبلغ × السعر = المبلغ بالعملة ${toAcc?.currency ?? ''}) *`}
+                  type="number"
+                  value={xfer.exchangeRate}
+                  onChange={v => setXfer(s => ({ ...s, exchangeRate: v }))}
+                />
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  مثال: 100 {fromAcc?.currency} بسعر 10 = 1000 {toAcc?.currency} تُضاف للحساب الوجهة.
+                </p>
+                {Number.isFinite(toAmount) && (
+                  <p className="text-sm font-medium text-emerald-800">
+                    المبلغ المضاف للحساب الوجهة: {formatMoney(toAmount, toAcc?.currency)} {toAcc?.currency}
+                  </p>
+                )}
+              </>
+            )}
+            <LabelInput label="ملاحظات" value={xfer.notes}
+              onChange={v => setXfer(s => ({ ...s, notes: v }))} />
+          </SimpleModal>
+        )
+      })()}
 
       {incomeModal && (
         <SimpleModal title="إيداع مبلغ" onClose={() => setIncome(false)}
@@ -238,6 +303,7 @@ function AccountTransactionsModal({
   const [fNotes, setFNotes] = useState('')
   const [fFrom, setFFrom] = useState('')
   const [fTo, setFTo] = useState('')
+  const [fExchangeRate, setFExchangeRate] = useState('1')
 
   useEffect(() => {
     if (!edit) return
@@ -256,8 +322,18 @@ function AccountTransactionsModal({
       setFNotes(r.notes ?? '')
       setFFrom(r.from_account_id ?? '')
       setFTo(r.to_account_id ?? '')
+      setFExchangeRate(String(r.exchange_rate ?? 1))
     }
   }, [edit])
+
+  useEffect(() => {
+    if (!edit || edit.kind !== 'transfer') return
+    const fromA = accounts.find(a => a.id === fFrom)
+    const toA = accounts.find(a => a.id === fTo)
+    if (fromA && toA && fromA.currency === toA.currency) {
+      setFExchangeRate('1')
+    }
+  }, [edit, fFrom, fTo, accounts])
 
   const invalidateTx = () => {
     qc.invalidateQueries({ queryKey: ['account-receipts', id] })
@@ -295,21 +371,8 @@ function AccountTransactionsModal({
   })
 
   const deleteTransfer = useMutation({
-    mutationFn: async (t: { id: string; from_account_id: string; to_account_id: string; amount: number }) => {
-      const amt = Number(t.amount ?? 0)
-      const { data: fromAcc } = await supabase.from('accounts').select('balance').eq('id', t.from_account_id).single()
-      const { data: toAcc } = await supabase.from('accounts').select('balance').eq('id', t.to_account_id).single()
-      await supabase
-        .from('accounts')
-        .update({ balance: Number(fromAcc?.balance ?? 0) + amt })
-        .eq('id', t.from_account_id)
-        .throwOnError()
-      await supabase
-        .from('accounts')
-        .update({ balance: Number(toAcc?.balance ?? 0) - amt })
-        .eq('id', t.to_account_id)
-        .throwOnError()
-      await supabase.from('account_transfers').delete().eq('id', t.id).throwOnError()
+    mutationFn: async (transferId: string) => {
+      await supabase.from('account_transfers').delete().eq('id', transferId).throwOnError()
     },
     onSuccess: () => {
       invalidateTx()
@@ -327,12 +390,7 @@ function AccountTransactionsModal({
   }
   const confirmDeleteTransfer = (t: any) => {
     if (!window.confirm('حذف هذا التحويل وعكس أثره على الأرصدة؟')) return
-    deleteTransfer.mutate({
-      id: t.id,
-      from_account_id: t.from_account_id,
-      to_account_id: t.to_account_id,
-      amount: Number(t.amount ?? 0),
-    })
+    deleteTransfer.mutate(t.id)
   }
 
   const deleting = deleteReceipt.isPending || deleteExpense.isPending || deleteTransfer.isPending
@@ -373,12 +431,22 @@ function AccountTransactionsModal({
     mutationFn: async () => {
       if (!edit || edit.kind !== 'transfer') return
       if (!fFrom || !fTo || fFrom === fTo) throw new Error('اختر حسابين مختلفين')
+      const fromA = accounts.find(a => a.id === fFrom)
+      const toA = accounts.find(a => a.id === fTo)
+      if (!fromA || !toA) throw new Error('تعذر تحديد الحسابات')
+      const fromAmt = +fAmount
+      const needsFx = fromA.currency !== toA.currency
+      const er = needsFx ? Number(fExchangeRate) : 1
+      if (needsFx && (!Number.isFinite(er) || er <= 0)) throw new Error('أدخل سعر تحويل صالحاً')
+      const toAmt = fromAmt * er
       await supabase
         .from('account_transfers')
         .update({
           from_account_id: fFrom,
           to_account_id: fTo,
-          amount: +fAmount,
+          amount: fromAmt,
+          to_amount: toAmt,
+          exchange_rate: er,
           transfer_date: fDate,
           notes: fNotes.trim() || null,
         })
@@ -402,6 +470,17 @@ function AccountTransactionsModal({
     if (edit.kind === 'transfer' && (!fFrom || !fTo || fFrom === fTo)) {
       window.alert('يرجى اختيار حسابين مختلفين للتحويل')
       return
+    }
+    if (edit.kind === 'transfer') {
+      const fromA = accounts.find(a => a.id === fFrom)
+      const toA = accounts.find(a => a.id === fTo)
+      if (fromA && toA && fromA.currency !== toA.currency) {
+        const er = Number(fExchangeRate)
+        if (!Number.isFinite(er) || er <= 0) {
+          window.alert('يرجى إدخال سعر تحويل صالح أكبر من صفر')
+          return
+        }
+      }
     }
     if (edit.kind === 'receipt') saveReceipt.mutate()
     else if (edit.kind === 'expense') saveExpense.mutate()
@@ -534,9 +613,25 @@ function AccountTransactionsModal({
                             <td className="px-3 py-2 text-xs">
                               من {accName(t.from_account_id)} — إلى {accName(t.to_account_id)}
                             </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {formatMoney(Number(t.amount), accounts.find(a => a.id === t.from_account_id)?.currency ?? 'BHD')}{' '}
-                              {accounts.find(a => a.id === t.from_account_id)?.currency ?? 'BHD'}
+                            <td className="px-3 py-2 whitespace-nowrap text-xs">
+                              {(() => {
+                                const fromCur = accounts.find(a => a.id === t.from_account_id)?.currency ?? 'BHD'
+                                const toCur = accounts.find(a => a.id === t.to_account_id)?.currency ?? 'BHD'
+                                const fromAmt = Number(t.amount ?? 0)
+                                const toAmt = Number(t.to_amount ?? t.amount ?? 0)
+                                if (fromCur !== toCur) {
+                                  return (
+                                    <span>
+                                      −{formatMoney(fromAmt, fromCur)} {fromCur} → +{formatMoney(toAmt, toCur)} {toCur}
+                                    </span>
+                                  )
+                                }
+                                return out ? (
+                                  <>−{formatMoney(fromAmt, fromCur)} {fromCur}</>
+                                ) : (
+                                  <>+{formatMoney(toAmt, toCur)} {toCur}</>
+                                )
+                              })()}
                             </td>
                             <td className="px-3 py-2">{t.transfer_date ?? '—'}</td>
                             <td className="px-2 py-2">
@@ -567,7 +662,40 @@ function AccountTransactionsModal({
             <h3 className="text-lg font-bold text-gray-800">
               {edit.kind === 'receipt' ? 'تعديل إيصال' : edit.kind === 'expense' ? 'تعديل مصروف' : 'تعديل تحويل'}
             </h3>
-            <LabelInput label="المبلغ *" type="number" value={fAmount} onChange={setFAmount} />
+            <LabelInput
+              label={
+                edit.kind === 'transfer'
+                  ? `المبلغ من الحساب المصدر (${accounts.find(a => a.id === fFrom)?.currency ?? '—'}) *`
+                  : 'المبلغ *'
+              }
+              type="number"
+              value={fAmount}
+              onChange={setFAmount}
+            />
+            {edit.kind === 'transfer' && (() => {
+              const fromA = accounts.find(a => a.id === fFrom)
+              const toA = accounts.find(a => a.id === fTo)
+              const needsFx = !!(fromA && toA && fromA.currency !== toA.currency)
+              if (!needsFx) return null
+              const rate = Number(fExchangeRate)
+              const fromAmt = Number(fAmount)
+              const toAmt = Number.isFinite(fromAmt) && Number.isFinite(rate) ? fromAmt * rate : NaN
+              return (
+                <>
+                  <LabelInput
+                    label={`سعر التحويل (المبلغ × السعر = المبلغ بـ ${toA.currency}) *`}
+                    type="number"
+                    value={fExchangeRate}
+                    onChange={setFExchangeRate}
+                  />
+                  {Number.isFinite(toAmt) && (
+                    <p className="text-sm font-medium text-emerald-800">
+                      المبلغ المضاف للوجهة: {formatMoney(toAmt, toA.currency)} {toA.currency}
+                    </p>
+                  )}
+                </>
+              )
+            })()}
             <LabelInput label={edit.kind === 'expense' ? 'تاريخ المصروف *' : edit.kind === 'receipt' ? 'تاريخ الدفع *' : 'تاريخ التحويل *'} type="date" value={fDate} onChange={setFDate} />
             <LabelInput label="ملاحظات" value={fNotes} onChange={setFNotes} />
             {edit.kind === 'transfer' && (
