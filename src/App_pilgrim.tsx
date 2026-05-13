@@ -18,6 +18,7 @@ import VisaTrackingPage    from './pages/VisaTrackingPage'
 import DocumentsPage       from './pages/DocumentsPage'
 import RemindersPage       from './pages/RemindersPage'
 import AdahiPage           from './pages/AdahiPage'
+import PilgrimPortalPage   from './pages/PilgrimPortalPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 60 * 2 } }
@@ -34,6 +35,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/pilgrim" element={<PilgrimPortalPage />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"              element={<DashboardPage />} />
