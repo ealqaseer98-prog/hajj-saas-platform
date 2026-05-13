@@ -10,7 +10,7 @@ A full-featured Arabic web application for Hajj travel agencies to manage travel
 |--------|-------|
 | 🔐 تسجيل الدخول | Login with username & password stored in database |
 | 📊 لوحة التحكم | Dashboard with KPIs, alerts, financial summary |
-| 👤 المسافرون | Add/edit/delete travellers by CPR, search, view profile |
+| 👤 الحجاج | Add/edit/delete travellers by CPR, search, view profile |
 | ✈️ الرحلات | Create trips with legs (plane/bus/train/car), enroll travellers |
 | 📒 المحاسبة | Invoices, receipts, expenses — all linked to travellers/trips |
 | 💰 الحسابات | Cash & bank accounts, transfers, direct deposits |

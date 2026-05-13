@@ -27,7 +27,7 @@ ON CONFLICT (username) DO NOTHING;
 
 
 -- -------------------------------------------------------
--- 2. TRAVELLERS (المسافرون)
+-- 2. TRAVELLERS (الحجاج)
 -- -------------------------------------------------------
 CREATE TABLE IF NOT EXISTS travellers (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   description     TEXT,
   issue_date      DATE DEFAULT CURRENT_DATE,
   due_date        DATE,
-  status          TEXT DEFAULT 'unpaid',  -- 'unpaid' | 'partial' | 'paid' | 'cancelled'
+  status          TEXT DEFAULT 'unpaid',  -- 'unpaid' | 'partial' | 'paid' | 'overpaid' | 'cancelled'
   notes           TEXT,
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW()
@@ -182,7 +182,9 @@ CREATE TABLE IF NOT EXISTS account_transfers (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   from_account_id UUID REFERENCES accounts(id),
   to_account_id   UUID REFERENCES accounts(id),
-  amount          NUMERIC(12,3) NOT NULL,
+  amount          NUMERIC(12,3) NOT NULL,   -- deducted from source account (source currency)
+  to_amount       NUMERIC(12,3) NOT NULL,  -- credited to destination account (destination currency)
+  exchange_rate   NUMERIC(18,6) NOT NULL DEFAULT 1, -- to_amount = amount × exchange_rate (1 when same currency)
   transfer_date   DATE DEFAULT CURRENT_DATE,
   notes           TEXT,
   created_at      TIMESTAMPTZ DEFAULT NOW()
@@ -255,20 +257,81 @@ RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     UPDATE accounts SET balance = balance + NEW.amount WHERE id = NEW.account_id;
-    UPDATE invoices SET amount_paid = amount_paid + NEW.amount,
-      status = CASE
-        WHEN (amount_paid + NEW.amount) >= amount THEN 'paid'
-        WHEN (amount_paid + NEW.amount) > 0 THEN 'partial'
-        ELSE 'unpaid' END
-      WHERE id = NEW.invoice_id;
+    IF NEW.invoice_id IS NOT NULL THEN
+      UPDATE invoices SET amount_paid = amount_paid + NEW.amount,
+        status = CASE
+          WHEN (amount_paid + NEW.amount) > amount THEN 'overpaid'
+          WHEN (amount_paid + NEW.amount) >= amount THEN 'paid'
+          WHEN (amount_paid + NEW.amount) > 0 THEN 'partial'
+          ELSE 'unpaid' END
+        WHERE id = NEW.invoice_id;
+    END IF;
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- Account balance: same account → delta; else reverse old and apply new
+    IF OLD.account_id IS NOT DISTINCT FROM NEW.account_id THEN
+      IF NEW.account_id IS NOT NULL THEN
+        UPDATE accounts SET balance = balance + (NEW.amount - OLD.amount) WHERE id = NEW.account_id;
+      END IF;
+    ELSE
+      IF OLD.account_id IS NOT NULL THEN
+        UPDATE accounts SET balance = balance - OLD.amount WHERE id = OLD.account_id;
+      END IF;
+      IF NEW.account_id IS NOT NULL THEN
+        UPDATE accounts SET balance = balance + NEW.amount WHERE id = NEW.account_id;
+      END IF;
+    END IF;
+    -- Invoice amount_paid + status (overpaid when paid > amount)
+    IF OLD.invoice_id IS NOT DISTINCT FROM NEW.invoice_id AND OLD.invoice_id IS NOT NULL THEN
+      UPDATE invoices SET
+        amount_paid = GREATEST(0, amount_paid - OLD.amount + NEW.amount),
+        status = CASE
+          WHEN (amount_paid - OLD.amount + NEW.amount) > amount THEN 'overpaid'
+          WHEN (amount_paid - OLD.amount + NEW.amount) >= amount THEN 'paid'
+          WHEN (amount_paid - OLD.amount + NEW.amount) > 0 THEN 'partial'
+          ELSE 'unpaid' END
+        WHERE id = NEW.invoice_id;
+    ELSE
+      IF OLD.invoice_id IS NOT NULL THEN
+        UPDATE invoices SET
+          amount_paid = GREATEST(0, amount_paid - OLD.amount),
+          status = CASE
+            WHEN (amount_paid - OLD.amount) <= 0 THEN 'unpaid'
+            WHEN (amount_paid - OLD.amount) < amount THEN 'partial'
+            WHEN (amount_paid - OLD.amount) > amount THEN 'overpaid'
+            WHEN (amount_paid - OLD.amount) >= amount THEN 'paid'
+            ELSE 'unpaid' END
+          WHERE id = OLD.invoice_id;
+      END IF;
+      IF NEW.invoice_id IS NOT NULL AND NEW.invoice_id IS DISTINCT FROM OLD.invoice_id THEN
+        UPDATE invoices SET amount_paid = amount_paid + NEW.amount,
+          status = CASE
+            WHEN (amount_paid + NEW.amount) > amount THEN 'overpaid'
+            WHEN (amount_paid + NEW.amount) >= amount THEN 'paid'
+            WHEN (amount_paid + NEW.amount) > 0 THEN 'partial'
+            ELSE 'unpaid' END
+          WHERE id = NEW.invoice_id;
+      END IF;
+    END IF;
   ELSIF TG_OP = 'DELETE' THEN
     UPDATE accounts SET balance = balance - OLD.amount WHERE id = OLD.account_id;
+    IF OLD.invoice_id IS NOT NULL THEN
+      UPDATE invoices SET
+        amount_paid = GREATEST(0, amount_paid - OLD.amount),
+        status = CASE
+          WHEN (amount_paid - OLD.amount) <= 0 THEN 'unpaid'
+          WHEN (amount_paid - OLD.amount) < amount THEN 'partial'
+          WHEN (amount_paid - OLD.amount) > amount THEN 'overpaid'
+          WHEN (amount_paid - OLD.amount) >= amount THEN 'paid'
+          ELSE 'unpaid' END
+        WHERE id = OLD.invoice_id;
+    END IF;
   END IF;
-  RETURN NEW;
+  RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER receipt_balance_update AFTER INSERT OR DELETE ON receipts
+DROP TRIGGER IF EXISTS receipt_balance_update ON receipts;
+CREATE TRIGGER receipt_balance_update AFTER INSERT OR UPDATE OR DELETE ON receipts
   FOR EACH ROW EXECUTE FUNCTION update_account_on_receipt();
 
 
@@ -297,14 +360,9 @@ CREATE TRIGGER expense_balance_update AFTER INSERT OR DELETE ON expenses
 CREATE OR REPLACE FUNCTION update_account_on_transfer()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF TG_OP = 'INSERT' THEN
-    UPDATE accounts SET balance = balance - NEW.amount WHERE id = NEW.from_account_id;
-    UPDATE accounts SET balance = balance + NEW.amount WHERE id = NEW.to_account_id;
-  ELSIF TG_OP = 'DELETE' THEN
-    UPDATE accounts SET balance = balance + OLD.amount WHERE id = OLD.from_account_id;
-    UPDATE accounts SET balance = balance - OLD.amount WHERE id = OLD.to_account_id;
-  END IF;
-  RETURN NEW;
+  -- Balances for transfers are updated in the app (AccountsPage) using amount / to_amount
+  -- so this trigger does not modify accounts (avoids double-counting with client updates).
+  RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
 

@@ -42,7 +42,7 @@ CREATE TRIGGER travellers_visa_log
 
 
 -- -------------------------------------------------------
--- 3. TRAVELLER DOCUMENTS (مستندات المسافر)
+-- 3. TRAVELLER DOCUMENTS (مستندات الحاج)
 --    Files stored in Supabase Storage bucket: traveller-docs
 -- -------------------------------------------------------
 CREATE TABLE IF NOT EXISTS traveller_documents (
