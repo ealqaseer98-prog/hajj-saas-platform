@@ -179,6 +179,11 @@ export default function PilgrimPortalPage() {
           {step === 'login' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
               <div className="text-center">
+                <img
+                  src={LOGO_URL}
+                  alt="logo"
+                  style={{ height: '80px', display: 'block', margin: '0 auto' }}
+                />
                 <h1 className="text-xl font-bold text-gray-800">بوابة الحاج</h1>
                 <p className="text-sm text-gray-500 mt-1">أدخل رقم بطاقتك الشخصية للدخول</p>
               </div>
