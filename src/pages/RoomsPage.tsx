@@ -20,6 +20,7 @@ export default function RoomsPage() {
   const [newRoom, setNewRoom]           = useState<Partial<Room>>({ room_type: 'quad', capacity: 4 })
   const [selectedTraveller, setSelectedTraveller] = useState('')
   const [assignSearch, setAssignSearch] = useState('')
+  const [noRoomListModal, setNoRoomListModal] = useState(false)
 
   // Hotel info
   const { data: hotel } = useQuery({
@@ -63,6 +64,22 @@ export default function RoomsPage() {
     enabled: !!hotel,
   })
 
+  /** Travellers with no room assignment in any hotel (only used when this hotel has no trip) */
+  const { data: travellersNoRoomAnywhere = [] } = useQuery({
+    queryKey: ['travellers-no-room-globally'],
+    queryFn: async () => {
+      const [{ data: allTravellers, error: e1 }, { data: assignedRows, error: e2 }] = await Promise.all([
+        supabase.from('travellers').select('id, full_name_ar, cpr_number').order('full_name_ar'),
+        supabase.from('room_assignments').select('traveller_id'),
+      ])
+      if (e1) throw e1
+      if (e2) throw e2
+      const assigned = new Set((assignedRows ?? []).map((r: { traveller_id: string }) => r.traveller_id))
+      return ((allTravellers ?? []) as Traveller[]).filter(t => !assigned.has(t.id))
+    },
+    enabled: !!hotel && !hotel.trip_id,
+  })
+
   const createRoom = useMutation({
     mutationFn: (r: Partial<Room>) =>
       supabase.from('rooms').insert({ ...r, hotel_id: hotelId }).throwOnError(),
@@ -82,12 +99,16 @@ export default function RoomsPage() {
       setAssignModal(null)
       setSelectedTraveller('')
       setAssignSearch('')
+      qc.invalidateQueries({ queryKey: ['travellers-no-room-globally'] })
     },
   })
 
   const removeAssignment = useMutation({
     mutationFn: (id: string) => supabase.from('room_assignments').delete().eq('id', id).throwOnError(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rooms', hotelId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rooms', hotelId] })
+      qc.invalidateQueries({ queryKey: ['travellers-no-room-globally'] })
+    },
   })
 
   const deleteRoom = useMutation({
@@ -95,12 +116,17 @@ export default function RoomsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rooms', hotelId] })
       qc.invalidateQueries({ queryKey: ['room-counts'] })
+      qc.invalidateQueries({ queryKey: ['travellers-no-room-globally'] })
     },
   })
 
   // Travellers not yet assigned to any room in this hotel
   const assignedIds = rooms.flatMap((r: any) => (r.assignments ?? []).map((a: any) => a.traveller_id))
   const unassigned  = travellers.filter(t => !assignedIds.includes(t.id))
+  const travellersWithoutRoomList: Traveller[] = hotel?.trip_id
+    ? unassigned
+    : travellersNoRoomAnywhere
+  const withoutRoomCount = travellersWithoutRoomList.length
   const assignSearchTerm = assignSearch.trim().toLowerCase()
   const matchingAssignable = assignSearchTerm
     ? unassigned.filter((t: Traveller) =>
@@ -211,12 +237,25 @@ export default function RoomsPage() {
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {unassigned.length > 0 && (
+          {withoutRoomCount > 0 && (
             <div className="flex items-center gap-1 text-amber-600 text-xs bg-amber-50 px-2 py-1 rounded-lg">
               <AlertTriangle size={12} />
-              {unassigned.length} حاج بدون غرفة
+              {withoutRoomCount} حاج بدون غرفة
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => setNoRoomListModal(true)}
+            disabled={!hotel}
+            className="relative flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            بدون غرفة
+            {withoutRoomCount > 0 && (
+              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold leading-none text-white">
+                {withoutRoomCount}
+              </span>
+            )}
+          </button>
           <button
             type="button"
             onClick={printRoomsReport}
@@ -403,7 +442,9 @@ export default function RoomsPage() {
             </div>
             {unassigned.length === 0 && (
               <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2">
-                جميع الحجاج المرتبطين بهذه الرحلة قد تم تعيينهم لغرف
+                {hotel?.trip_id
+                  ? 'جميع الحجاج المرتبطين بهذه الرحلة قد تم تعيينهم لغرف هذا الفندق'
+                  : 'لا يوجد حجاج غير معيّنين في غرف هذا الفندق'}
               </p>
             )}
             <div className="flex gap-3 pt-2">
@@ -423,6 +464,62 @@ export default function RoomsPage() {
                 }}
                 className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm">
                 إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Travellers without a room (trip scope or all travellers with no assignment anywhere) */}
+      {noRoomListModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="no-room-modal-title"
+          onClick={e => {
+            if (e.target === e.currentTarget) setNoRoomListModal(false)
+          }}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-md flex-col rounded-2xl border border-gray-100 bg-white shadow-2xl"
+            dir="rtl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h2 id="no-room-modal-title" className="text-lg font-bold text-gray-800">
+                بدون غرفة
+              </h2>
+              <p className="mt-1 text-xs text-gray-500">
+                {hotel?.trip_id
+                  ? 'حجاج رحلة هذا الفندق غير المعيّنين في غرف هذا الفندق'
+                  : 'جميع الحجاج الذين ليس لديهم تعيين غرفة في أي فندق'}
+              </p>
+              <p className="mt-2 text-sm font-medium text-emerald-700">العدد: {withoutRoomCount}</p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+              {travellersWithoutRoomList.length === 0 ? (
+                <p className="py-8 text-center text-sm text-gray-400">لا يوجد حجاج بدون غرفة</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {travellersWithoutRoomList.map(t => (
+                    <li key={t.id} className="flex flex-wrap items-baseline justify-between gap-2 py-3 text-sm">
+                      <span className="font-medium text-gray-800">{t.full_name_ar}</span>
+                      <span className="font-mono text-xs text-gray-600 tabular-nums" dir="ltr">
+                        {t.cpr_number ?? '—'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="border-t border-gray-100 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setNoRoomListModal(false)}
+                className="w-full rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                إغلاق
               </button>
             </div>
           </div>
