@@ -1,20 +1,33 @@
 // src/pages/AdahiPage.tsx
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Search, FileText, Printer, Filter } from 'lucide-react'
+import { Search, FileText, Printer } from 'lucide-react'
 
 const SAR_CASH_ACCOUNT_ID = '18acae25-9a14-40ee-acd1-9f40f87cc142'
 const DEFAULT_AMOUNT      = 720
 const DEFAULT_DESC        = 'أضحية موسم الحج 1447 هـ'
 
 type FilterType = 'all' | 'paid' | 'unpaid'
+type AdahiPaymentMethod = 'cash' | 'bank_transfer'
+
+function paymentMethodLabel(m: string | undefined): string {
+  return m === 'bank_transfer' ? 'تحويل بنكي' : 'نقدي'
+}
+
+const fieldClass =
+  'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500'
 
 export default function AdahiPage() {
   const qc = useQueryClient()
   const [search,       setSearch]       = useState('')
   const [listFilter,   setListFilter]   = useState<FilterType>('all')
-  const [processing,   setProcessing]   = useState<string | null>(null)  // traveller id being processed
+  const [paymentModal, setPaymentModal] = useState<{
+    traveller: any
+    amount: string
+    description: string
+    paymentMethod: AdahiPaymentMethod
+  } | null>(null)
 
   // ── Fetch all travellers ──────────────────────────────────────────────────
   const { data: travellers = [], isLoading } = useQuery({
@@ -34,7 +47,7 @@ export default function AdahiPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('invoices')
-        .select('id, traveller_id, amount, amount_paid, status, invoice_number')
+        .select('id, traveller_id, amount, amount_paid, status, invoice_number, description, receipts(payment_method)')
         .ilike('description', '%أضحية%')
       return (data ?? []) as any[]
     },
@@ -44,63 +57,69 @@ export default function AdahiPage() {
   const invoiceMap: Record<string, any> = {}
   adahiInvoices.forEach((inv: any) => { invoiceMap[inv.traveller_id] = inv })
 
-  // ── Create invoice + receipt together ────────────────────────────────────
+  // ── Create invoice (unpaid) then receipt; trigger marks invoice paid ─────
   const createPayment = useMutation({
-    mutationFn: async (traveller: any) => {
-      setProcessing(traveller.id)
+    mutationFn: async (payload: {
+      traveller: any
+      amount: number
+      description: string
+      paymentMethod: AdahiPaymentMethod
+    }) => {
+      const { traveller, amount, description, paymentMethod } = payload
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error('مبلغ غير صالح')
 
-      // 1. Count existing invoices for number generation
       const { count: invCount } = await supabase
         .from('invoices').select('*', { count: 'exact', head: true })
       const invNum = `ADH-1447-${String((invCount ?? 0) + 1).padStart(3, '0')}`
 
-      // 2. Create invoice
       const { data: inv, error: invErr } = await supabase
         .from('invoices')
         .insert({
           invoice_number: invNum,
           traveller_id:   traveller.id,
           account_id:     SAR_CASH_ACCOUNT_ID,
-          amount:         DEFAULT_AMOUNT,
-          amount_paid:    DEFAULT_AMOUNT,
+          amount,
           currency:       'SAR',
-          description:    DEFAULT_DESC,
+          description,
           issue_date:     new Date().toISOString().slice(0, 10),
-          status:         'paid',
+          status:         'unpaid',
         })
         .select()
         .single()
 
       if (invErr) throw invErr
 
-      // 3. Count existing receipts for number
       const { count: rcpCount } = await supabase
         .from('receipts').select('*', { count: 'exact', head: true })
       const rcpNum = `RCP-ADH-${String((rcpCount ?? 0) + 1).padStart(3, '0')}`
 
-      // 4. Create receipt
       const { error: rcpErr } = await supabase
         .from('receipts')
         .insert({
-          receipt_number:  rcpNum,
-          invoice_id:      inv.id,
-          traveller_id:    traveller.id,
-          account_id:      SAR_CASH_ACCOUNT_ID,
-          amount:          DEFAULT_AMOUNT,
-          currency:        'SAR',
-          payment_method:  'cash',
-          payment_date:    new Date().toISOString().slice(0, 10),
-          notes:           DEFAULT_DESC,
+          receipt_number: rcpNum,
+          invoice_id:     inv.id,
+          traveller_id:   traveller.id,
+          account_id:     SAR_CASH_ACCOUNT_ID,
+          amount,
+          currency:       'SAR',
+          payment_method: paymentMethod,
+          payment_date:   new Date().toISOString().slice(0, 10),
+          notes:          description,
         })
 
-      if (rcpErr) throw rcpErr
+      if (rcpErr) {
+        await supabase.from('invoices').delete().eq('id', inv.id)
+        throw rcpErr
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['adahi-invoices'] })
       qc.invalidateQueries({ queryKey: ['accounts-list'] })
-      setProcessing(null)
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['invoices-list'] })
+      setPaymentModal(null)
     },
-    onError: () => setProcessing(null),
   })
 
   // ── Delete payment ────────────────────────────────────────────────────────
@@ -111,7 +130,13 @@ export default function AdahiPage() {
       await supabase.from('receipts').delete().eq('invoice_id', inv.id)
       await supabase.from('invoices').delete().eq('id', inv.id)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['adahi-invoices'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['adahi-invoices'] })
+      qc.invalidateQueries({ queryKey: ['accounts-list'] })
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['invoices-list'] })
+    },
   })
 
   // ── Filter + search ───────────────────────────────────────────────────────
@@ -128,12 +153,15 @@ export default function AdahiPage() {
 
   const paidCount   = travellers.filter((t: any) => !!invoiceMap[t.id]).length
   const unpaidCount = travellers.length - paidCount
-  const totalSAR    = paidCount * DEFAULT_AMOUNT
+  const totalSAR    = adahiInvoices.reduce((s: number, inv: any) => s + Number(inv.amount ?? 0), 0)
 
   // ── Print receipt for one traveller ──────────────────────────────────────
   const printReceipt = (traveller: any) => {
     const inv  = invoiceMap[traveller.id]
     if (!inv) return
+    const desc = (inv.description ?? DEFAULT_DESC).replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const amt  = Number(inv.amount ?? DEFAULT_AMOUNT)
+    const pm   = paymentMethodLabel(Array.isArray(inv.receipts) ? inv.receipts[0]?.payment_method : (inv.receipts as any)?.payment_method)
     const date = new Date().toLocaleDateString('ar-BH')
     const win  = window.open('', '_blank')
     if (!win) return
@@ -172,9 +200,9 @@ export default function AdahiPage() {
         <div class="row"><span class="label">التاريخ:</span><span class="value">${date}</span></div>
         <div class="row"><span class="label">اسم الحاج:</span><span class="value">${traveller.full_name_ar}</span></div>
         <div class="row"><span class="label">رقم البطاقة:</span><span class="value">${traveller.cpr_number}</span></div>
-        <div class="row"><span class="label">الوصف:</span><span class="value">${DEFAULT_DESC}</span></div>
-        <div class="row"><span class="label">طريقة الدفع:</span><span class="value">نقدي</span></div>
-        <div class="amount">المبلغ المستلم: ${DEFAULT_AMOUNT.toLocaleString()} ريال سعودي</div>
+        <div class="row"><span class="label">الوصف:</span><span class="value">${desc}</span></div>
+        <div class="row"><span class="label">طريقة الدفع:</span><span class="value">${pm}</span></div>
+        <div class="amount">المبلغ المستلم: ${amt.toLocaleString()} ريال سعودي</div>
         <div class="footer">
           <p>حملة العمار للحج والعمرة</p>
         </div>
@@ -238,12 +266,13 @@ export default function AdahiPage() {
             ${listData.map((t: any, i: number) => {
               const inv    = invoiceMap[t.id]
               const isPaid = !!inv
+              const paidAmt = inv ? Number(inv.amount ?? 0) : 0
               return `<tr>
                 <td>${i + 1}</td>
                 <td>${t.full_name_ar}</td>
                 <td>${t.cpr_number}</td>
                 <td>${t.phone ?? '—'}</td>
-                <td>${isPaid ? DEFAULT_AMOUNT + ' ر.س' : '—'}</td>
+                <td>${isPaid ? paidAmt.toLocaleString() + ' ر.س' : '—'}</td>
                 <td class="${isPaid ? 'paid' : 'unpaid'}">${isPaid ? '✓ مدفوع' : '✗ لم يُدفع'}</td>
                 <td>${inv?.invoice_number ?? '—'}</td>
               </tr>`
@@ -346,11 +375,20 @@ export default function AdahiPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   {!isPaid ? (
                     <button
-                      onClick={() => createPayment.mutate(t)}
-                      disabled={processing === t.id}
+                      type="button"
+                      onClick={() => {
+                        createPayment.reset()
+                        setPaymentModal({
+                          traveller: t,
+                          amount: String(DEFAULT_AMOUNT),
+                          description: DEFAULT_DESC,
+                          paymentMethod: 'cash',
+                        })
+                      }}
+                      disabled={createPayment.isPending}
                       className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors">
                       <FileText size={13} />
-                      {processing === t.id ? 'جارٍ...' : 'تسجيل الدفع'}
+                      تسجيل الدفع
                     </button>
                   ) : (
                     <>
@@ -371,9 +409,9 @@ export default function AdahiPage() {
 
               {/* Amount display */}
               {isPaid && (
-                <div className="mt-2 text-xs text-gray-500 flex items-center gap-4">
-                  <span>المبلغ: <strong className="text-gray-700">{DEFAULT_AMOUNT} ر.س</strong></span>
-                  <span>نقدي</span>
+                <div className="mt-2 text-xs text-gray-500 flex items-center gap-4 flex-wrap">
+                  <span>المبلغ: <strong className="text-gray-700">{Number(inv.amount ?? 0).toLocaleString()} ر.س</strong></span>
+                  <span>{paymentMethodLabel(Array.isArray(inv.receipts) ? inv.receipts[0]?.payment_method : (inv.receipts as any)?.payment_method)}</span>
                   <span>{inv.invoice_number}</span>
                 </div>
               )}
@@ -381,6 +419,90 @@ export default function AdahiPage() {
           )
         })}
       </div>
+
+      {paymentModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="adahi-payment-modal-title"
+        >
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100 max-h-[90vh] overflow-y-auto">
+            <h2 id="adahi-payment-modal-title" className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-2">
+              تسجيل دفع — {paymentModal.traveller.full_name_ar}
+            </h2>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">المبلغ</label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                className={fieldClass}
+                value={paymentModal.amount}
+                onChange={e => setPaymentModal(m => (m ? { ...m, amount: e.target.value } : m))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">الوصف</label>
+              <input
+                type="text"
+                className={fieldClass}
+                value={paymentModal.description}
+                onChange={e => setPaymentModal(m => (m ? { ...m, description: e.target.value } : m))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">طريقة الدفع</label>
+              <select
+                className={fieldClass}
+                value={paymentModal.paymentMethod}
+                onChange={e =>
+                  setPaymentModal(m =>
+                    m ? { ...m, paymentMethod: e.target.value as AdahiPaymentMethod } : m
+                  )
+                }
+              >
+                <option value="cash">نقدي</option>
+                <option value="bank_transfer">تحويل بنكي</option>
+              </select>
+            </div>
+            {createPayment.isError && (
+              <p className="text-sm text-red-600">تعذّر الحفظ. تحقق من الاتصال أو الصلاحيات.</p>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50"
+                disabled={createPayment.isPending}
+                onClick={() => {
+                  createPayment.reset()
+                  setPaymentModal(null)
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-emerald-800"
+                disabled={createPayment.isPending}
+                onClick={() => {
+                  const amt = Number(paymentModal.amount)
+                  const description = paymentModal.description.trim() || DEFAULT_DESC
+                  if (!Number.isFinite(amt) || amt <= 0) return
+                  createPayment.mutate({
+                    traveller: paymentModal.traveller,
+                    amount: amt,
+                    description,
+                    paymentMethod: paymentModal.paymentMethod,
+                  })
+                }}
+              >
+                {createPayment.isPending ? 'جارٍ الحفظ...' : 'تأكيد وتسجيل'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
