@@ -2,6 +2,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
+import { canAccessFinancePages } from './lib/permissions'
 import Layout from './components/layout/Layout'
 import LoginPage           from './pages/LoginPage'
 import DashboardPage       from './pages/DashboardPage'
@@ -29,6 +30,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+function FinanceRoute({ children }: { children: React.ReactNode }) {
+  const role = useAuthStore(s => s.user?.role)
+  if (!canAccessFinancePages(role)) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -44,14 +53,14 @@ export default function App() {
             <Route path="trips"                  element={<TripsPage />} />
             <Route path="trips/:id"              element={<TripDetailPage />} />
             <Route path="trip-manifest"          element={<TripManifestPage />} />
-            <Route path="accounting"             element={<AccountingPage />} />
-            <Route path="accounts"               element={<AccountsPage />} />
+            <Route path="accounting"             element={<FinanceRoute><AccountingPage /></FinanceRoute>} />
+            <Route path="accounts"               element={<FinanceRoute><AccountsPage /></FinanceRoute>} />
             <Route path="hotels"                 element={<HotelsPage />} />
             <Route path="hotels/:hotelId/rooms"  element={<RoomsPage />} />
             <Route path="visa-tracking"          element={<VisaTrackingPage />} />
             <Route path="documents"              element={<DocumentsPage />} />
-            <Route path="reminders"              element={<RemindersPage />} />
-            <Route path="adahi"                  element={<AdahiPage />} />
+            <Route path="reminders"              element={<FinanceRoute><RemindersPage /></FinanceRoute>} />
+            <Route path="adahi"                  element={<FinanceRoute><AdahiPage /></FinanceRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>

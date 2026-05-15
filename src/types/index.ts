@@ -228,7 +228,7 @@ export interface AppUser {
   id:        string
   username:  string
   full_name: string | null
-  role:      'admin' | 'agent'
+  role:      'admin' | 'agent' | 'coordinator'
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, Clock, XCircle, ChevronDown, History, Filter } from 'lucide-react'
 import type { Traveller, VisaStatus, PackageType } from '../types'
 import { useAuthStore } from '../store/authStore'
+import { canManageVisa } from '../lib/permissions'
 
 const STATUS_CFG: Record<VisaStatus, { label: string; icon: React.ReactNode; bg: string; text: string; border: string }> = {
   pending:  { label: 'في الانتظار', icon: <Clock size={14} />,       bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
@@ -30,6 +31,7 @@ export default function VisaTrackingPage() {
   const qc       = useQueryClient()
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const canEdit = canManageVisa(user?.role)
 
   const [filterStatus, setFilterStatus] = useState<VisaStatus | 'all'>('all')
   const [historyModal, setHistoryModal]  = useState<string | null>(null) // traveller id
@@ -166,7 +168,7 @@ export default function VisaTrackingPage() {
       </div>
 
       {/* Bulk action bar */}
-      {bulkSelected.size > 0 && (
+      {canEdit && bulkSelected.size > 0 && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-wrap items-stretch md:items-center gap-2 md:gap-3">
           <span className="text-sm font-medium text-emerald-800 w-full md:w-auto">{bulkSelected.size} حاج محدد</span>
           <select className="border border-emerald-300 rounded-lg px-2 py-1.5 text-sm bg-white w-full md:w-auto"
@@ -218,17 +220,21 @@ export default function VisaTrackingPage() {
           <table className="hidden md:table w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="px-4 py-3 w-8">
-                  <input type="checkbox" className="rounded"
-                    checked={bulkSelected.size === filteredTravellers.length && filteredTravellers.length > 0}
-                    onChange={e => setBulkSelected(e.target.checked ? new Set(filteredTravellers.map(t => t.id)) : new Set())} />
-                </th>
+                {canEdit && (
+                  <th className="px-4 py-3 w-8">
+                    <input type="checkbox" className="rounded"
+                      checked={bulkSelected.size === filteredTravellers.length && filteredTravellers.length > 0}
+                      onChange={e => setBulkSelected(e.target.checked ? new Set(filteredTravellers.map(t => t.id)) : new Set())} />
+                  </th>
+                )}
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الحاج</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">رقم البطاقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">مصدر التصريح</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الباقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الحالة</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">تغيير الحالة</th>
+                {canEdit && (
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">تغيير الحالة</th>
+                )}
                 <th className="px-4 py-3 font-medium text-gray-600">السجل</th>
               </tr>
             </thead>
@@ -237,10 +243,12 @@ export default function VisaTrackingPage() {
                 const cfg = STATUS_CFG[t.visa_status]
                 return (
                   <tr key={t.id} className={`hover:bg-gray-50 transition-colors ${bulkSelected.has(t.id) ? 'bg-emerald-50' : ''}`}>
-                    <td className="px-4 py-3">
-                      <input type="checkbox" className="rounded" checked={bulkSelected.has(t.id)}
-                        onChange={() => toggleBulk(t.id)} />
-                    </td>
+                    {canEdit && (
+                      <td className="px-4 py-3">
+                        <input type="checkbox" className="rounded" checked={bulkSelected.has(t.id)}
+                          onChange={() => toggleBulk(t.id)} />
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <button className="text-right hover:text-emerald-700" onClick={() => navigate(`/travellers/${t.id}`)}>
                         <p className="font-medium text-gray-800 flex items-center gap-1">
@@ -262,16 +270,18 @@ export default function VisaTrackingPage() {
                         {cfg.icon} {cfg.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <select
-                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
-                        value={t.visa_status}
-                        onChange={e => updateVisa.mutate({ id: t.id, status: e.target.value as VisaStatus })}>
-                        <option value="pending">في الانتظار</option>
-                        <option value="approved">موافق عليه</option>
-                        <option value="rejected">مرفوض</option>
-                      </select>
-                    </td>
+                    {canEdit && (
+                      <td className="px-4 py-3">
+                        <select
+                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                          value={t.visa_status}
+                          onChange={e => updateVisa.mutate({ id: t.id, status: e.target.value as VisaStatus })}>
+                          <option value="pending">في الانتظار</option>
+                          <option value="approved">موافق عليه</option>
+                          <option value="rejected">مرفوض</option>
+                        </select>
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <button onClick={() => setHistoryModal(t.id)}
                         className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
@@ -307,17 +317,19 @@ export default function VisaTrackingPage() {
                         : '—'}
                     </p>
                   </div>
-                  <div className="mt-3">
-                    <label className="block text-xs text-gray-500 mb-1">تغيير الحالة</label>
-                    <select
-                      className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
-                      value={t.visa_status}
-                      onChange={e => updateVisa.mutate({ id: t.id, status: e.target.value as VisaStatus })}>
-                      <option value="pending">في الانتظار</option>
-                      <option value="approved">موافق عليه</option>
-                      <option value="rejected">مرفوض</option>
-                    </select>
-                  </div>
+                  {canEdit && (
+                    <div className="mt-3">
+                      <label className="block text-xs text-gray-500 mb-1">تغيير الحالة</label>
+                      <select
+                        className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                        value={t.visa_status}
+                        onChange={e => updateVisa.mutate({ id: t.id, status: e.target.value as VisaStatus })}>
+                        <option value="pending">في الانتظار</option>
+                        <option value="approved">موافق عليه</option>
+                        <option value="rejected">مرفوض</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
                     <button onClick={() => setHistoryModal(t.id)}
                       className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"

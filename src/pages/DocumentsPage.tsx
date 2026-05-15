@@ -5,6 +5,8 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../store/authStore'
+import { canManageDocuments } from '../lib/permissions'
 import { Upload, Trash2, Download, Search, FileText, Eye, Filter } from 'lucide-react'
 import type { TravellerDocument, DocType, Traveller } from '../types'
 
@@ -27,6 +29,7 @@ const DOC_TYPE_COLOR: Record<DocType, string> = {
 export default function DocumentsPage() {
   const qc = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const canEdit = canManageDocuments(useAuthStore(s => s.user?.role))
 
   const [search,       setSearch]       = useState('')
   const [docTypeFilter,setDocTypeFilter] = useState<DocType | 'all'>('all')
@@ -133,10 +136,12 @@ export default function DocumentsPage() {
           <h1 className="text-2xl font-bold text-gray-800">المستندات والوثائق</h1>
           <p className="text-sm text-gray-500 mt-0.5">رفع وإدارة مستندات الحجاج</p>
         </div>
-        <button onClick={() => setUploadModal(true)}
-          className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          <Upload size={15} /> رفع مستند
-        </button>
+        {canEdit && (
+          <button onClick={() => setUploadModal(true)}
+            className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            <Upload size={15} /> رفع مستند
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -225,12 +230,14 @@ export default function DocumentsPage() {
                         title="تنزيل">
                         <Download size={14} />
                       </a>
-                      <button
-                        onClick={() => window.confirm('حذف المستند؟') && deleteDoc.mutate(doc)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="حذف">
-                        <Trash2 size={14} />
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => window.confirm('حذف المستند؟') && deleteDoc.mutate(doc)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="حذف">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -241,7 +248,7 @@ export default function DocumentsPage() {
       )}
 
       {/* Upload Modal */}
-      {uploadModal && (
+      {canEdit && uploadModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" dir="rtl">
             <h2 className="text-lg font-bold text-gray-800">رفع مستند جديد</h2>

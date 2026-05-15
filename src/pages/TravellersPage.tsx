@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../store/authStore'
+import { canManageTravellers } from '../lib/permissions'
 import { Search, Plus, Edit2, Trash2, Eye, UserCheck, AlertCircle } from 'lucide-react'
 import type { Traveller, VisaStatus, PackageType } from '../types'
 
@@ -65,6 +67,7 @@ const EMPTY: Partial<Traveller> = {
 export default function TravellersPage() {
   const qc        = useQueryClient()
   const navigate  = useNavigate()
+  const canEdit   = canManageTravellers(useAuthStore(s => s.user?.role))
   const [search, setSearch]           = useState('')
   const [modal, setModal]             = useState<'add' | 'edit' | null>(null)
   const [selected, setSelected]       = useState<Partial<Traveller>>(EMPTY)
@@ -292,12 +295,14 @@ export default function TravellersPage() {
           >
             تصدير PDF
           </button>
-          <button
-            onClick={() => { setSelected(EMPTY); setModal('add') }}
-            className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus size={16} /> إضافة حاج
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => { setSelected(EMPTY); setModal('add') }}
+              className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus size={16} /> إضافة حاج
+            </button>
+          )}
 
           {showColumnPicker && (
             <div className="absolute left-0 top-12 z-20 bg-white border border-gray-200 shadow-lg rounded-xl p-3 w-64 space-y-2">
@@ -434,12 +439,16 @@ export default function TravellersPage() {
                       <button onClick={() => navigate(`/travellers/${t.id}`)}
                         className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
                         title="عرض الملف الشخصي"><Eye size={15} /></button>
-                      <button onClick={() => openEdit(t)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="تعديل"><Edit2 size={15} /></button>
-                      <button onClick={() => window.confirm('هل أنت متأكد من الحذف؟') && del.mutate(t.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="حذف"><Trash2 size={15} /></button>
+                      {canEdit && (
+                        <>
+                          <button onClick={() => openEdit(t)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="تعديل"><Edit2 size={15} /></button>
+                          <button onClick={() => window.confirm('هل أنت متأكد من الحذف؟') && del.mutate(t.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="حذف"><Trash2 size={15} /></button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -478,12 +487,16 @@ export default function TravellersPage() {
                   <button onClick={() => navigate(`/travellers/${t.id}`)}
                     className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
                     title="عرض الملف الشخصي"><Eye size={15} /></button>
-                  <button onClick={() => openEdit(t)}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="تعديل"><Edit2 size={15} /></button>
-                  <button onClick={() => window.confirm('هل أنت متأكد من الحذف؟') && del.mutate(t.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="حذف"><Trash2 size={15} /></button>
+                  {canEdit && (
+                    <>
+                      <button onClick={() => openEdit(t)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="تعديل"><Edit2 size={15} /></button>
+                      <button onClick={() => window.confirm('هل أنت متأكد من الحذف؟') && del.mutate(t.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="حذف"><Trash2 size={15} /></button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -492,7 +505,7 @@ export default function TravellersPage() {
         )}
       </div>
 
-      {modal && (
+      {canEdit && modal && (
         <TravellerModal
           mode={modal} data={selected} onChange={setSelected}
           onSave={() => save.mutate(selected)}

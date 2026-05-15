@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import { filterNavSectionsForRole, isCoordinator } from '../../lib/permissions'
 import {
   LayoutDashboard, Users, Plane, BookOpen, Building2,
   LogOut, Wallet, ShieldCheck, FileStack, Bell,
@@ -43,14 +44,19 @@ const navSections = [
   },
 ]
 
-const mobileBottomMain: { to: string; icon: typeof LayoutDashboard; label: string }[] = [
+const mobileBottomAdmin: { to: string; icon: typeof LayoutDashboard; label: string }[] = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'الرئيسية' },
   { to: '/travellers', icon: Users, label: 'الحجاج' },
   { to: '/trips', icon: Plane, label: 'الرحلات' },
   { to: '/accounting', icon: BookOpen, label: 'المحاسبة' },
 ]
 
-const mobileBottomPaths = new Set(mobileBottomMain.map(i => i.to))
+const mobileBottomCoordinator: { to: string; icon: typeof LayoutDashboard; label: string }[] = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'الرئيسية' },
+  { to: '/travellers', icon: Users, label: 'الحجاج' },
+  { to: '/trips', icon: Plane, label: 'الرحلات' },
+  { to: '/hotels', icon: Building2, label: 'الفنادق' },
+]
 
 export default function Layout() {
   const { user, logout } = useAuthStore()
@@ -62,7 +68,11 @@ export default function Layout() {
     navigate('/login')
   }
 
-  const moreSections = navSections.map(section => ({
+  const mobileBottomMain = isCoordinator(user?.role) ? mobileBottomCoordinator : mobileBottomAdmin
+  const mobileBottomPaths = new Set(mobileBottomMain.map(i => i.to))
+  const visibleNavSections = filterNavSectionsForRole(navSections, user?.role)
+
+  const moreSections = visibleNavSections.map(section => ({
     ...section,
     items: section.items.filter(({ to }) => !mobileBottomPaths.has(to)),
   })).filter(s => s.items.length > 0)
@@ -84,7 +94,7 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
-          {navSections.map(section => (
+          {visibleNavSections.map(section => (
             <div key={section.label}>
               <p className="text-emerald-400 text-xs font-semibold px-3 mb-1 uppercase tracking-wider">
                 {section.label}
