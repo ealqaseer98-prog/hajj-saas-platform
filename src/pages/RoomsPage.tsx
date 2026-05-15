@@ -441,7 +441,6 @@ export default function RoomsPage() {
             {[
               ['رقم الغرفة *', 'room_number', 'text'],
               ['الطابق',      'floor',       'text'],
-              ['السعة',        'capacity',    'number'],
             ].map(([label, key, type]) => (
               <div key={key as string}>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
@@ -478,6 +477,18 @@ export default function RoomsPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">السعة</label>
+              <input
+                className={ic}
+                type="number"
+                min={1}
+                value={editRoom.capacity ?? ''}
+                onChange={e =>
+                  setEditRoom(r => (r ? { ...r, capacity: +e.target.value || 1 } : r))
+                }
+              />
             </div>
             <div className="flex gap-3 pt-2">
               <button
