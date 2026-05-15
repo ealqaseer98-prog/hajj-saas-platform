@@ -289,8 +289,8 @@ export default function DashboardPage() {
           },
         ].map(card => (
           <button key={card.label} onClick={() => navigate(card.link)}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-right hover:shadow-md transition-shadow">
-            <div className={`inline-flex p-2 rounded-lg ${card.bg} mb-2`}>
+            className="flex flex-col items-center bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center hover:shadow-md transition-shadow">
+            <div className={`flex items-center justify-center p-2 rounded-lg ${card.bg} mb-2`}>
               <card.icon size={17} className={card.color} />
             </div>
             <p className="text-xs text-gray-500">{card.label}</p>
