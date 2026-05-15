@@ -342,7 +342,7 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center justify-between text-sm mb-1.5">
                 <span className="flex items-center gap-1.5 text-blue-700 font-medium">
-                  <span className="text-base">👨</span> رجال
+                  <span className="text-base">👨</span> ذكور
                 </span>
                 <span className="font-bold text-blue-700">{genderMales}
                   <span className="text-xs font-normal text-gray-400 mr-1">({malePercent}%)</span>
@@ -357,7 +357,7 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center justify-between text-sm mb-1.5">
                 <span className="flex items-center gap-1.5 text-pink-700 font-medium">
-                  <span className="text-base">🧕</span> نساء
+                  <span className="text-base">🧕</span> إناث
                 </span>
                 <span className="font-bold text-pink-700">{genderFemales}
                   <span className="text-xs font-normal text-gray-400 mr-1">({femalePercent}%)</span>

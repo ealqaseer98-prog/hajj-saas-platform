@@ -166,7 +166,7 @@ export default function TravellersPage() {
     if (key === 'full_name_ar') return t.full_name_ar ?? '—'
     if (key === 'full_name_en') return t.full_name_en ?? '—'
     if (key === 'cpr_number') return t.cpr_number ?? '—'
-    if (key === 'gender') return t.gender === 'male' ? 'رجل' : t.gender === 'female' ? 'امرأة' : '—'
+    if (key === 'gender') return t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'
     if (key === 'phone') return t.phone ?? '—'
     if (key === 'passport_number') return t.passport_number ?? '—'
     if (key === 'package_type') return t.package_type ? PACKAGE_LABELS[t.package_type] : '—'
@@ -278,8 +278,8 @@ export default function TravellersPage() {
           <h1 className="text-2xl font-bold text-gray-800">الحجاج</h1>
           <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
             <span>الإجمالي: {travellers.length}</span>
-            <span className="text-blue-600 font-medium">👨 رجال: {maleCount}</span>
-            <span className="text-pink-600 font-medium">🧕 نساء: {femaleCount}</span>
+            <span className="text-blue-600 font-medium">👨 ذكور: {maleCount}</span>
+            <span className="text-pink-600 font-medium">🧕 إناث: {femaleCount}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 relative">
@@ -336,8 +336,8 @@ export default function TravellersPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-2">
           <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={genderFilter} onChange={e => setGenderFilter(e.target.value as 'all' | 'male' | 'female')}>
             <option value="all">الجنس: الكل</option>
-            <option value="male">الجنس: رجال</option>
-            <option value="female">الجنس: نساء</option>
+            <option value="male">الجنس: ذكور</option>
+            <option value="female">الجنس: إناث</option>
           </select>
           <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={packageFilter} onChange={e => setPackageFilter(e.target.value as 'all' | PackageType)}>
             <option value="all">الباقة: الكل</option>
@@ -424,8 +424,8 @@ export default function TravellersPage() {
                           {VISA_LABELS[t.visa_status].label}
                         </span>
                       ) : col.key === 'gender' ? (
-                        t.gender === 'male' ? <span className="text-blue-600 text-xs font-medium">👨 رجل</span>
-                        : t.gender === 'female' ? <span className="text-pink-600 text-xs font-medium">🧕 امرأة</span>
+                        t.gender === 'male' ? <span className="text-blue-600 text-xs font-medium">👨 ذكر</span>
+                        : t.gender === 'female' ? <span className="text-pink-600 text-xs font-medium">🧕 أنثى</span>
                         : <span className="text-gray-300 text-xs">—</span>
                       ) : (
                         <span className={col.key === 'cpr_number' || col.key === 'phone' || col.key === 'passport_number' ? 'font-mono' : ''}>
@@ -468,7 +468,7 @@ export default function TravellersPage() {
                   <p><span className="text-gray-500">رقم البطاقة: </span><span className="font-mono">{t.cpr_number}</span></p>
                   <p>
                     <span className="text-gray-500">الجنس: </span>
-                    {t.gender === 'male' ? 'رجل' : t.gender === 'female' ? 'امرأة' : '—'}
+                    {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
                   </p>
                   <p>
                     <span className="text-gray-500">اسم المجموعة: </span>
@@ -552,8 +552,8 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
           <Field label="الجنس *" required>
             <select className={ic} value={data.gender ?? ''} onChange={f('gender')}>
               <option value="">— اختر —</option>
-              <option value="male">رجل</option>
-              <option value="female">امرأة</option>
+              <option value="male">ذكر</option>
+              <option value="female">أنثى</option>
             </select>
           </Field>
           <Field label="رقم الهاتف">

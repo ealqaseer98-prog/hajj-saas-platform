@@ -146,8 +146,8 @@ export default function TripManifestPage() {
               {[
                 { label: 'إجمالي الحجاج', value: travellers.length },
                 { label: 'الباقة',           value: { barr: 'البر', tayaran_dammam: 'طيران - الدمام', tayaran_bahrain: 'طيران - البحرين', tasreeh_only: 'فقط تصريح' }[trip.package_type] ?? trip.package_type },
-                { label: 'رجال',             value: males },
-                { label: 'نساء',             value: females },
+                { label: 'ذكور',             value: males },
+                { label: 'إناث',             value: females },
               ].map(s => (
                 <div key={s.label} className="bg-gray-50 print:bg-gray-100 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-gray-800">{s.value}</p>
@@ -202,7 +202,7 @@ export default function TripManifestPage() {
                     <td className="py-2 px-3 font-medium text-gray-800">{t.full_name_ar}</td>
                     <td className="py-2 px-3 font-mono text-gray-600">{t.cpr_number ?? '—'}</td>
                     <td className="py-2 px-3">
-                      {t.gender === 'male' ? 'رجل' : t.gender === 'female' ? 'امرأة' : '—'}
+                      {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
                     </td>
                     <td className="py-2 px-3 font-mono text-gray-600 text-xs" dir="ltr">{t.phone ?? '—'}</td>
                   </tr>

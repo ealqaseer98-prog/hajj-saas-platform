@@ -309,7 +309,7 @@ export default function VisaTrackingPage() {
                   </div>
                   <div className="mt-2 space-y-1.5 text-sm text-gray-600">
                     <p><span className="text-gray-500">رقم البطاقة: </span><span className="font-mono">{t.cpr_number}</span></p>
-                    <p><span className="text-gray-500">الجنس: </span>{t.gender === 'male' ? 'رجل' : t.gender === 'female' ? 'امرأة' : '—'}</p>
+                    <p><span className="text-gray-500">الجنس: </span>{t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}</p>
                     <p>
                       <span className="text-gray-500">مصدر التصريح: </span>
                       {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
