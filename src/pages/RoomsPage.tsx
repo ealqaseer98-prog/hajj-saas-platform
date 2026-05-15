@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { ArrowRight, Plus, UserPlus, Trash2, AlertTriangle, BedDouble, Printer, Edit2 } from 'lucide-react'
+import { ArrowRight, Plus, UserPlus, Trash2, AlertTriangle, BedDouble, Printer, Edit2, ArrowLeftRight } from 'lucide-react'
 import type { Room, RoomAssignment, Traveller, RoomType } from '../types'
 import { ROOM_TYPE_AR, ROOM_TYPE_CAPACITY } from '../lib/roomTypes'
 
@@ -19,6 +19,14 @@ export default function RoomsPage() {
   const [selectedTraveller, setSelectedTraveller] = useState('')
   const [assignSearch, setAssignSearch] = useState('')
   const [noRoomListModal, setNoRoomListModal] = useState(false)
+  const [switchRoom, setSwitchRoom] = useState<{
+    assignmentId: string
+    travellerId: string
+    travellerName: string
+    fromRoomId: string
+  } | null>(null)
+  const [switchRoomSearch, setSwitchRoomSearch] = useState('')
+  const [switchTargetRoomId, setSwitchTargetRoomId] = useState('')
 
   // Hotel info
   const { data: hotel } = useQuery({
@@ -128,6 +136,41 @@ export default function RoomsPage() {
     },
   })
 
+  const switchRoomAssignment = useMutation({
+    mutationFn: async ({
+      assignmentId,
+      travellerId,
+      toRoomId,
+    }: {
+      assignmentId: string
+      travellerId: string
+      toRoomId: string
+    }) => {
+      const { error: delError } = await supabase
+        .from('room_assignments')
+        .delete()
+        .eq('id', assignmentId)
+      if (delError) throw delError
+      const { error: insError } = await supabase
+        .from('room_assignments')
+        .insert({ room_id: toRoomId, traveller_id: travellerId })
+      if (insError) throw insError
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rooms', hotelId] })
+      qc.invalidateQueries({ queryKey: ['travellers-no-room-globally'] })
+      setSwitchRoom(null)
+      setSwitchRoomSearch('')
+      setSwitchTargetRoomId('')
+    },
+  })
+
+  const closeSwitchRoomModal = () => {
+    setSwitchRoom(null)
+    setSwitchRoomSearch('')
+    setSwitchTargetRoomId('')
+  }
+
   const deleteRoom = useMutation({
     mutationFn: (id: string) => supabase.from('rooms').delete().eq('id', id).throwOnError(),
     onSuccess: () => {
@@ -149,6 +192,28 @@ export default function RoomsPage() {
     ? unassigned.filter((t: Traveller) =>
         (t.full_name_ar ?? '').toLowerCase().includes(assignSearchTerm))
     : []
+
+  const switchDestRooms = switchRoom
+    ? rooms.filter((r: any) => {
+        if (r.id === switchRoom.fromRoomId) return false
+        const occ = (r.assignments ?? []).length
+        return occ < r.capacity
+      })
+    : []
+  const switchRoomSearchTerm = switchRoomSearch.trim().toLowerCase()
+  const matchingSwitchRooms = switchRoomSearchTerm
+    ? switchDestRooms.filter((r: any) =>
+        String(r.room_number ?? '').toLowerCase().includes(switchRoomSearchTerm)
+      )
+    : switchDestRooms
+
+  const resolveSwitchTargetRoomId = (): string | null => {
+    if (switchTargetRoomId) return switchTargetRoomId
+    const term = switchRoomSearch.trim()
+    if (!term) return null
+    const exact = switchDestRooms.find((r: any) => String(r.room_number) === term)
+    return exact?.id ?? null
+  }
 
   const escHtml = (s: string | undefined | null) =>
     String(s ?? '')
@@ -331,12 +396,34 @@ export default function RoomsPage() {
               {/* Occupants */}
               <div className="space-y-1.5 min-h-[40px]">
                 {(room.assignments ?? []).map((a: any) => (
-                  <div key={a.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-2.5 py-1.5 text-sm">
-                    <span className="text-gray-700">{a.traveller?.full_name_ar}</span>
-                    <button onClick={() => removeAssignment.mutate(a.id)}
-                      className="text-gray-300 hover:text-red-500 transition-colors">
-                      <Trash2 size={13} />
-                    </button>
+                  <div key={a.id} className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5 text-sm">
+                    <span className="text-gray-700 truncate min-w-0 flex-1">{a.traveller?.full_name_ar}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        title="نقل إلى غرفة أخرى"
+                        onClick={() => {
+                          setSwitchRoom({
+                            assignmentId: a.id,
+                            travellerId: a.traveller_id,
+                            travellerName: a.traveller?.full_name_ar ?? '—',
+                            fromRoomId: room.id,
+                          })
+                          setSwitchRoomSearch('')
+                          setSwitchTargetRoomId('')
+                        }}
+                        className="text-gray-300 hover:text-emerald-600 transition-colors"
+                      >
+                        <ArrowLeftRight size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeAssignment.mutate(a.id)}
+                        className="text-gray-300 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
                 ))}
                 {isEmpty && <p className="text-xs text-gray-300 italic">لا يوجد حاجون</p>}
@@ -499,6 +586,91 @@ export default function RoomsPage() {
               <button
                 type="button"
                 onClick={() => setEditRoom(null)}
+                className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Switch room modal */}
+      {switchRoom && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3" dir="rtl">
+            <h2 className="text-lg font-bold">نقل الحاج إلى غرفة أخرى</h2>
+            <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">
+              {switchRoom.travellerName}
+            </p>
+            <div className="relative">
+              <label className="block text-xs font-medium text-gray-600 mb-1">الغرفة الوجهة</label>
+              <input
+                type="text"
+                className={ic}
+                value={switchRoomSearch}
+                placeholder="ابحث أو اكتب رقم الغرفة..."
+                onChange={e => {
+                  setSwitchRoomSearch(e.target.value)
+                  setSwitchTargetRoomId('')
+                }}
+                autoComplete="off"
+              />
+              {switchRoomSearch.trim() && matchingSwitchRooms.length > 0 && (
+                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {matchingSwitchRooms.map((r: any) => {
+                    const occ = (r.assignments ?? []).length
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => {
+                          setSwitchTargetRoomId(r.id)
+                          setSwitchRoomSearch(String(r.room_number))
+                        }}
+                        className="w-full text-right px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                      >
+                        غرفة {r.room_number}
+                        <span className="text-gray-400 text-xs mr-2">
+                          ({occ}/{r.capacity})
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {switchRoomSearch.trim() && matchingSwitchRooms.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">لا توجد غرفة مطابقة أو الغرفة ممتلئة</p>
+              )}
+              {!switchRoomSearch.trim() && switchDestRooms.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">ابدأ بكتابة رقم الغرفة للبحث</p>
+              )}
+              {switchDestRooms.length === 0 && (
+                <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mt-1">
+                  لا توجد غرف متاحة للنقل في هذا الفندق
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const toRoomId = resolveSwitchTargetRoomId()
+                  if (!toRoomId) return
+                  switchRoomAssignment.mutate({
+                    assignmentId: switchRoom.assignmentId,
+                    travellerId: switchRoom.travellerId,
+                    toRoomId,
+                  })
+                }}
+                disabled={switchRoomAssignment.isPending || !resolveSwitchTargetRoomId()}
+                className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                تأكيد النقل
+              </button>
+              <button
+                type="button"
+                onClick={closeSwitchRoomModal}
                 className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm"
               >
                 إلغاء
