@@ -27,6 +27,7 @@ export default function RoomsPage() {
   } | null>(null)
   const [switchRoomSearch, setSwitchRoomSearch] = useState('')
   const [switchTargetRoomId, setSwitchTargetRoomId] = useState('')
+  const [switchRoomListOpen, setSwitchRoomListOpen] = useState(false)
 
   // Hotel info
   const { data: hotel } = useQuery({
@@ -162,6 +163,7 @@ export default function RoomsPage() {
       setSwitchRoom(null)
       setSwitchRoomSearch('')
       setSwitchTargetRoomId('')
+      setSwitchRoomListOpen(false)
     },
   })
 
@@ -169,6 +171,7 @@ export default function RoomsPage() {
     setSwitchRoom(null)
     setSwitchRoomSearch('')
     setSwitchTargetRoomId('')
+    setSwitchRoomListOpen(false)
   }
 
   const deleteRoom = useMutation({
@@ -411,6 +414,7 @@ export default function RoomsPage() {
                           })
                           setSwitchRoomSearch('')
                           setSwitchTargetRoomId('')
+                          setSwitchRoomListOpen(false)
                         }}
                         className="text-gray-300 hover:text-emerald-600 transition-colors"
                       >
@@ -598,12 +602,16 @@ export default function RoomsPage() {
       {/* Switch room modal */}
       {switchRoom && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3" dir="rtl">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3 overflow-visible" dir="rtl">
             <h2 className="text-lg font-bold">نقل الحاج إلى غرفة أخرى</h2>
             <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">
               {switchRoom.travellerName}
             </p>
-            <div className="relative">
+            <div
+              className={`relative overflow-visible ${
+                switchRoomListOpen && matchingSwitchRooms.length > 0 ? 'z-50 pb-52' : 'z-10'
+              }`}
+            >
               <label className="block text-xs font-medium text-gray-600 mb-1">الغرفة الوجهة</label>
               <input
                 type="text"
@@ -613,31 +621,43 @@ export default function RoomsPage() {
                 onChange={e => {
                   setSwitchRoomSearch(e.target.value)
                   setSwitchTargetRoomId('')
+                  setSwitchRoomListOpen(true)
+                }}
+                onFocus={() => {
+                  if (matchingSwitchRooms.length > 0) setSwitchRoomListOpen(true)
                 }}
                 autoComplete="off"
               />
-              {switchRoomSearch.trim() && matchingSwitchRooms.length > 0 && (
-                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+              {switchRoomListOpen && matchingSwitchRooms.length > 0 && (
+                <ul
+                  role="listbox"
+                  className="absolute left-0 right-0 top-full z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+                >
                   {matchingSwitchRooms.map((r: any) => {
                     const occ = (r.assignments ?? []).length
+                    const selected = switchTargetRoomId === r.id
                     return (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => {
-                          setSwitchTargetRoomId(r.id)
-                          setSwitchRoomSearch(String(r.room_number))
-                        }}
-                        className="w-full text-right px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0"
-                      >
-                        غرفة {r.room_number}
-                        <span className="text-gray-400 text-xs mr-2">
-                          ({occ}/{r.capacity})
-                        </span>
-                      </button>
+                      <li key={r.id} role="option" aria-selected={selected}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSwitchTargetRoomId(r.id)
+                            setSwitchRoomSearch(String(r.room_number))
+                            setSwitchRoomListOpen(false)
+                          }}
+                          className={`w-full border-b border-gray-50 px-3 py-2 text-right text-sm last:border-0 hover:bg-emerald-50 ${
+                            selected ? 'bg-emerald-50 font-medium text-emerald-800' : 'text-gray-800'
+                          }`}
+                        >
+                          غرفة {r.room_number}
+                          <span className="mr-2 text-xs text-gray-400">
+                            ({occ}/{r.capacity})
+                          </span>
+                        </button>
+                      </li>
                     )
                   })}
-                </div>
+                </ul>
               )}
               {switchRoomSearch.trim() && matchingSwitchRooms.length === 0 && (
                 <p className="text-xs text-gray-500 mt-1">لا توجد غرفة مطابقة أو الغرفة ممتلئة</p>
@@ -651,7 +671,7 @@ export default function RoomsPage() {
                 </p>
               )}
             </div>
-            <div className="flex gap-3 pt-2">
+            <div className="relative z-0 flex gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => {
