@@ -37,6 +37,7 @@ function invoiceOutstanding(inv: { amount: unknown; amount_paid: unknown }) {
 export default function DashboardPage() {
   const { user }  = useAuthStore()
   const navigate  = useNavigate()
+  const isAdmin   = user?.role === 'admin'
   const [genderFilter, setGenderFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
   const [permitFilter, setPermitFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
 
@@ -201,7 +202,11 @@ export default function DashboardPage() {
     return 'مساء النور'
   }
 
-  const alertCount = (stats?.visaPending ?? 0) + overdueInvoices.length + expiringPassports.length
+  const alertCount =
+    (stats?.visaPending ?? 0) +
+    (isAdmin ? overdueInvoices.length : 0) +
+    expiringPassports.length +
+    (isAdmin ? dueSoon.length : 0)
 
   const genderFilteredTravellers = (stats?.travellerData ?? []).filter((t: any) =>
     genderFilter === 'all' ? true : t.tasreeh_source === genderFilter
@@ -245,7 +250,7 @@ export default function DashboardPage() {
             message={`${stats?.visaRejected} حاج رُفض تصريحه`}
             action="عرض" onAction={() => navigate('/travellers')} />
         )}
-        {overdueInvoices.length > 0 && (
+        {isAdmin && overdueInvoices.length > 0 && (
           <AlertBanner color="red" icon={<FileWarning size={16} />}
             message={`${overdueInvoices.length} فاتورة متأخرة عن موعد السداد`}
             action="عرض المحاسبة" onAction={() => navigate('/accounting')} />
@@ -255,7 +260,7 @@ export default function DashboardPage() {
             message={`${expiringPassports.length} جواز سفر ينتهي خلال 6 أشهر`}
             action="عرض" onAction={() => navigate('/travellers')} />
         )}
-        {dueSoon.length > 0 && (
+        {isAdmin && dueSoon.length > 0 && (
           <AlertBanner color="blue" icon={<Bell size={16} />}
             message={`${dueSoon.length} فاتورة تستحق خلال 7 أيام`}
             action="عرض" onAction={() => navigate('/accounting')} />
@@ -263,30 +268,34 @@ export default function DashboardPage() {
       </div>
 
       {/* ── KPI row ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className={`grid grid-cols-2 md:grid-cols-3 gap-3 ${isAdmin ? 'lg:grid-cols-6' : 'lg:grid-cols-4'}`}>
         {[
           { label: 'إجمالي الحجاج', value: stats?.total ?? 0,         icon: Users,        color: 'text-teal-600',    bg: 'bg-teal-50',    link: '/travellers' },
           { label: 'تصاريح البحرين',   value: stats?.bahrainTasreeh ?? 0, icon: CheckCircle2, color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/travellers' },
           { label: 'تصاريح السعودية',  value: stats?.saudiTasreeh ?? 0,   icon: CheckCircle2, color: 'text-green-600',   bg: 'bg-green-50',   link: '/travellers' },
           { label: 'رحلات قادمة',       value: stats?.upcomingTrips ?? 0, icon: Plane,         color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/trips' },
-          {
-            label: 'رصيد الحسابات',
-            value: `${formatBhd(stats?.balanceBhd ?? 0)} BHD`,
-            subValue: `${formatSar(stats?.balanceSar ?? 0)} SAR`,
-            icon: Wallet,
-            color: 'text-emerald-600',
-            bg: 'bg-emerald-50',
-            link: '/accounts',
-          },
-          {
-            label: 'المبالغ المستحقة',
-            value: `${formatBhd(stats?.outstandingBhd ?? 0)} BHD`,
-            subValue: `${formatSar(stats?.outstandingSar ?? 0)} SAR`,
-            icon: AlertCircle,
-            color: 'text-red-600',
-            bg: 'bg-red-50',
-            link: '/accounting',
-          },
+          ...(isAdmin
+            ? [
+                {
+                  label: 'رصيد الحسابات',
+                  value: `${formatBhd(stats?.balanceBhd ?? 0)} BHD`,
+                  subValue: `${formatSar(stats?.balanceSar ?? 0)} SAR`,
+                  icon: Wallet,
+                  color: 'text-emerald-600',
+                  bg: 'bg-emerald-50',
+                  link: '/accounts',
+                },
+                {
+                  label: 'المبالغ المستحقة',
+                  value: `${formatBhd(stats?.outstandingBhd ?? 0)} BHD`,
+                  subValue: `${formatSar(stats?.outstandingSar ?? 0)} SAR`,
+                  icon: AlertCircle,
+                  color: 'text-red-600',
+                  bg: 'bg-red-50',
+                  link: '/accounting',
+                },
+              ]
+            : []),
         ].map(card => (
           <button key={card.label} onClick={() => navigate(card.link)}
             className="flex flex-col items-center bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center hover:shadow-md transition-shadow">
@@ -424,7 +433,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Financial summary ── */}
+      {/* ── Financial summary (admin only) ── */}
+      {isAdmin && (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">الملخص المالي</h2>
         <div className="space-y-3">
@@ -476,9 +486,10 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      )}
 
-      {/* ── Bottom 3-col grid ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* ── Bottom grid ── */}
+      <div className={`grid grid-cols-1 gap-4 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
 
         {/* Recent travellers */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
@@ -522,7 +533,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Due soon invoices */}
+        {/* Due soon invoices (admin only) */}
+        {isAdmin && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-700">فواتير تستحق قريبًا</h2>
@@ -548,6 +560,7 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+        )}
       </div>
     </div>
   )
