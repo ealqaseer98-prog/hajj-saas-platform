@@ -367,7 +367,7 @@ export default function RoomsPage() {
                   onClick={() =>
                     setEditRoom({
                       id: room.id,
-                      room_number: room.room_number,
+                      room_number: String(room.room_number ?? ''),
                       room_type: room.room_type as RoomType,
                       capacity: room.capacity,
                       floor: room.floor ?? '',
@@ -438,29 +438,26 @@ export default function RoomsPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3" dir="rtl">
             <h2 className="text-lg font-bold">تعديل الغرفة</h2>
-            {[
-              ['رقم الغرفة *', 'room_number', 'text'],
-              ['الطابق',      'floor',       'text'],
-            ].map(([label, key, type]) => (
-              <div key={key as string}>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-                <input
-                  className={ic}
-                  type={type}
-                  value={(editRoom as any)[key] ?? ''}
-                  onChange={e =>
-                    setEditRoom(r =>
-                      r
-                        ? {
-                            ...r,
-                            [key as string]: type === 'number' ? +e.target.value : e.target.value,
-                          }
-                        : r
-                    )
-                  }
-                />
-              </div>
-            ))}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">رقم الغرفة *</label>
+              <input
+                className={ic}
+                type="text"
+                value={editRoom.room_number ?? ''}
+                onChange={e =>
+                  setEditRoom(r => (r ? { ...r, room_number: e.target.value } : r))
+                }
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">الطابق</label>
+              <input
+                className={ic}
+                type="text"
+                value={editRoom.floor ?? ''}
+                onChange={e => setEditRoom(r => (r ? { ...r, floor: e.target.value } : r))}
+              />
+            </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">نوع الغرفة</label>
               <select
