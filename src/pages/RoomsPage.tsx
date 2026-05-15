@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { ArrowRight, Plus, UserPlus, Trash2, AlertTriangle, BedDouble, Printer } from 'lucide-react'
+import { ArrowRight, Plus, UserPlus, Trash2, AlertTriangle, BedDouble, Printer, Edit2 } from 'lucide-react'
 import type { Room, RoomAssignment, Traveller, RoomType } from '../types'
 import { ROOM_TYPE_AR, ROOM_TYPE_CAPACITY } from '../lib/roomTypes'
 
@@ -13,6 +13,7 @@ export default function RoomsPage() {
   const qc          = useQueryClient()
 
   const [addRoomModal, setAddRoomModal] = useState(false)
+  const [editRoom, setEditRoom]         = useState<Partial<Room> & { id: string } | null>(null)
   const [assignModal, setAssignModal]   = useState<string | null>(null) // room id
   const [newRoom, setNewRoom]           = useState<Partial<Room>>({ room_type: 'quad', capacity: 4 })
   const [selectedTraveller, setSelectedTraveller] = useState('')
@@ -85,6 +86,25 @@ export default function RoomsPage() {
       qc.invalidateQueries({ queryKey: ['room-counts'] })
       setAddRoomModal(false)
       setNewRoom({ room_type: 'quad', capacity: 4 })
+    },
+  })
+
+  const updateRoom = useMutation({
+    mutationFn: (r: Partial<Room> & { id: string }) =>
+      supabase
+        .from('rooms')
+        .update({
+          room_number: r.room_number,
+          room_type: r.room_type,
+          capacity: r.capacity,
+          floor: r.floor || null,
+        })
+        .eq('id', r.id)
+        .throwOnError(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rooms', hotelId] })
+      qc.invalidateQueries({ queryKey: ['room-counts'] })
+      setEditRoom(null)
     },
   })
 
@@ -341,6 +361,22 @@ export default function RoomsPage() {
                     <UserPlus size={12} /> إضافة حاج
                   </button>
                 )}
+                <button
+                  type="button"
+                  title="تعديل الغرفة"
+                  onClick={() =>
+                    setEditRoom({
+                      id: room.id,
+                      room_number: room.room_number,
+                      room_type: room.room_type as RoomType,
+                      capacity: room.capacity,
+                      floor: room.floor ?? '',
+                    })
+                  }
+                  className="text-xs text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 px-2 py-1 rounded-lg transition-colors"
+                >
+                  <Edit2 size={12} />
+                </button>
                 <button onClick={() => window.confirm('حذف الغرفة؟') && deleteRoom.mutate(room.id)}
                   className="text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors">
                   <Trash2 size={12} />
@@ -390,6 +426,73 @@ export default function RoomsPage() {
               </button>
               <button onClick={() => setAddRoomModal(false)}
                 className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit room modal */}
+      {editRoom && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3" dir="rtl">
+            <h2 className="text-lg font-bold">تعديل الغرفة</h2>
+            {[
+              ['رقم الغرفة *', 'room_number', 'text'],
+              ['الطابق',      'floor',       'text'],
+              ['السعة',        'capacity',    'number'],
+            ].map(([label, key, type]) => (
+              <div key={key as string}>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                <input
+                  className={ic}
+                  type={type}
+                  value={(editRoom as any)[key] ?? ''}
+                  onChange={e =>
+                    setEditRoom(r =>
+                      r
+                        ? {
+                            ...r,
+                            [key as string]: type === 'number' ? +e.target.value : e.target.value,
+                          }
+                        : r
+                    )
+                  }
+                />
+              </div>
+            ))}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">نوع الغرفة</label>
+              <select
+                className={ic}
+                value={editRoom.room_type ?? 'quad'}
+                onChange={e => {
+                  const room_type = e.target.value as RoomType
+                  setEditRoom(r => (r ? { ...r, room_type, capacity: ROOM_TYPE_CAPACITY[room_type] } : r))
+                }}
+              >
+                {Object.entries(ROOM_TYPE_AR).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => editRoom.id && updateRoom.mutate(editRoom as Partial<Room> & { id: string })}
+                disabled={updateRoom.isPending || !editRoom.room_number}
+                className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                حفظ
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditRoom(null)}
+                className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm"
+              >
                 إلغاء
               </button>
             </div>
