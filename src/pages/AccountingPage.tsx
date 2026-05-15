@@ -12,7 +12,7 @@ type Currency = 'BHD' | 'SAR'
 function formatCurrencyAmount(n: number, currency: Currency | string | undefined): string {
   const c = currency ?? 'BHD'
   if (c === 'SAR') {
-    return Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
   return Number(n).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }

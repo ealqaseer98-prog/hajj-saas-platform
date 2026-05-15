@@ -6,6 +6,13 @@ import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut } 
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
+function formatSar(value: number) {
+  return Number(value ?? 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
 type Step = 'login' | 'confirm' | 'portal'
 
 export default function PilgrimPortalPage() {
@@ -129,7 +136,7 @@ export default function PilgrimPortalPage() {
         <div class="row"><span class="label">رقم البطاقة:</span><span class="value">${traveller.cpr_number}</span></div>
         <div class="row"><span class="label">الوصف:</span><span class="value">${adahiInv.description}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">نقدي</span></div>
-        <div class="amount">المبلغ المستلم: ${Number(adahiRcp.amount).toLocaleString('en-US')} ريال سعودي</div>
+        <div class="amount">المبلغ المستلم: ${formatSar(Number(adahiRcp.amount))} ريال سعودي</div>
         <div class="footer"><p>حملة العمار للحج والعمرة</p></div>
         <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 2000); }, 1500); }</script>
       </body>
@@ -339,7 +346,7 @@ export default function PilgrimPortalPage() {
                         <p className="text-xs text-green-600">{adahiInv.description}</p>
                       </div>
                       <span className="mr-auto font-bold text-green-700">
-                        {Number(adahiInv.amount).toLocaleString('en-US')} ر.س
+                        {formatSar(Number(adahiInv.amount))} ر.س
                       </span>
                     </div>
                     {adahiRcp && (
@@ -357,7 +364,7 @@ export default function PilgrimPortalPage() {
                       <p className="text-xs text-red-500">{adahiInv.description}</p>
                     </div>
                     <span className="mr-auto font-bold text-red-600">
-                      {Number(adahiInv.amount).toLocaleString('en-US')} ر.س
+                      {formatSar(Number(adahiInv.amount))} ر.س
                     </span>
                   </div>
                 )}

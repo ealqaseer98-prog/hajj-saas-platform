@@ -6,12 +6,32 @@ import { supabase } from '../lib/supabase'
 import { Users, Plane, Wallet, AlertCircle, FileWarning, Bell, CheckCircle2, Clock } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 
-function formatMoney(value: number, currency: string | undefined) {
-  const c = currency ?? 'BHD'
-  if (c === 'SAR') {
-    return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-  }
-  return Number(value).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+type DashboardCurrency = 'BHD' | 'SAR'
+
+function formatBhd(value: number) {
+  return Number(value ?? 0).toLocaleString('en-US', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  })
+}
+
+function formatSar(value: number) {
+  return Number(value ?? 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function formatMoney(value: number, currency: DashboardCurrency | string | undefined) {
+  return invoiceCurrency(currency) === 'SAR' ? formatSar(value) : formatBhd(value)
+}
+
+function invoiceCurrency(c: string | undefined): DashboardCurrency {
+  return c === 'SAR' ? 'SAR' : 'BHD'
+}
+
+function invoiceOutstanding(inv: { amount: unknown; amount_paid: unknown }) {
+  return Math.max(0, Number(inv.amount ?? 0) - Number(inv.amount_paid ?? 0))
 }
 
 export default function DashboardPage() {
@@ -35,8 +55,8 @@ export default function DashboardPage() {
       ] = await Promise.all([
         supabase.from('travellers').select('id, gender, tasreeh_source, visa_status'),
         supabase.from('trips').select('*', { count: 'exact', head: true }).eq('status', 'upcoming'),
-        supabase.from('invoices').select('amount, amount_paid').neq('status', 'cancelled'),
-        supabase.from('accounts').select('balance'),
+        supabase.from('invoices').select('amount, amount_paid, currency').neq('status', 'cancelled'),
+        supabase.from('accounts').select('balance, currency'),
         supabase.from('travellers').select('*', { count: 'exact', head: true }).eq('visa_status', 'pending'),
         supabase.from('travellers').select('*', { count: 'exact', head: true }).eq('visa_status', 'approved'),
         supabase.from('travellers').select('*', { count: 'exact', head: true }).eq('visa_status', 'rejected'),
@@ -49,18 +69,46 @@ export default function DashboardPage() {
       const bahrainTasreeh = travellerData?.filter(t => t.tasreeh_source === 'bahrain').length ?? 0
       const saudiTasreeh   = travellerData?.filter(t => t.tasreeh_source === 'saudi').length ?? 0
 
-      const totalInvoiced = (invoiceData ?? []).reduce((s, i) => s + Number(i.amount), 0)
-      const totalPaid     = (invoiceData ?? []).reduce((s, i) => s + Number(i.amount_paid), 0)
-      const totalBalance  = (accounts ?? []).reduce((s, a) => s + Number(a.balance), 0)
+      const invoices = invoiceData ?? []
+      const accountRows = accounts ?? []
+
+      const sumInvoices = (currency: DashboardCurrency, field: 'amount' | 'outstanding') =>
+        invoices
+          .filter(i => invoiceCurrency(i.currency) === currency)
+          .reduce(
+            (s, i) =>
+              s +
+              (field === 'amount'
+                ? Number(i.amount ?? 0)
+                : invoiceOutstanding(i)),
+            0
+          )
+
+      const sumPaid = (currency: DashboardCurrency) =>
+        invoices
+          .filter(i => invoiceCurrency(i.currency) === currency)
+          .reduce((s, i) => s + Number(i.amount_paid ?? 0), 0)
+
+      const balanceBhd = accountRows
+        .filter(a => invoiceCurrency(a.currency) === 'BHD')
+        .reduce((s, a) => s + Number(a.balance ?? 0), 0)
+      const balanceSar = accountRows
+        .filter(a => invoiceCurrency(a.currency) === 'SAR')
+        .reduce((s, a) => s + Number(a.balance ?? 0), 0)
 
       return {
         travellerData: travellerData ?? [],
         total, males, females, noGender,
         bahrainTasreeh, saudiTasreeh,
         upcomingTrips: upcomingTrips ?? 0,
-        totalInvoiced, totalPaid,
-        outstanding: totalInvoiced - totalPaid,
-        totalBalance,
+        totalInvoicedBhd: sumInvoices('BHD', 'amount'),
+        totalInvoicedSar: sumInvoices('SAR', 'amount'),
+        totalPaidBhd: sumPaid('BHD'),
+        totalPaidSar: sumPaid('SAR'),
+        outstandingBhd: sumInvoices('BHD', 'outstanding'),
+        outstandingSar: sumInvoices('SAR', 'outstanding'),
+        balanceBhd,
+        balanceSar,
         visaPending:  visaPending ?? 0,
         visaApproved: visaApproved ?? 0,
         visaRejected: visaRejected ?? 0,
@@ -221,8 +269,24 @@ export default function DashboardPage() {
           { label: 'تصاريح البحرين',   value: stats?.bahrainTasreeh ?? 0, icon: CheckCircle2, color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/travellers' },
           { label: 'تصاريح السعودية',  value: stats?.saudiTasreeh ?? 0,   icon: CheckCircle2, color: 'text-green-600',   bg: 'bg-green-50',   link: '/travellers' },
           { label: 'رحلات قادمة',       value: stats?.upcomingTrips ?? 0, icon: Plane,         color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/trips' },
-          { label: 'رصيد الحسابات',    value: `${formatMoney(stats?.totalBalance ?? 0, 'BHD')} BHD`, icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/accounts' },
-          { label: 'المبالغ المستحقة', value: `${formatMoney(stats?.outstanding ?? 0, 'BHD')} BHD`,  icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', link: '/accounting' },
+          {
+            label: 'رصيد الحسابات',
+            value: `${formatBhd(stats?.balanceBhd ?? 0)} BHD`,
+            subValue: `${formatSar(stats?.balanceSar ?? 0)} SAR`,
+            icon: Wallet,
+            color: 'text-emerald-600',
+            bg: 'bg-emerald-50',
+            link: '/accounts',
+          },
+          {
+            label: 'المبالغ المستحقة',
+            value: `${formatBhd(stats?.outstandingBhd ?? 0)} BHD`,
+            subValue: `${formatSar(stats?.outstandingSar ?? 0)} SAR`,
+            icon: AlertCircle,
+            color: 'text-red-600',
+            bg: 'bg-red-50',
+            link: '/accounting',
+          },
         ].map(card => (
           <button key={card.label} onClick={() => navigate(card.link)}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-right hover:shadow-md transition-shadow">
@@ -230,7 +294,10 @@ export default function DashboardPage() {
               <card.icon size={17} className={card.color} />
             </div>
             <p className="text-xs text-gray-500">{card.label}</p>
-            <p className={`text-xl font-bold mt-0.5 ${card.color}`}>{card.value}</p>
+            <p className={`text-xl font-bold mt-0.5 tabular-nums ${card.color}`}>{card.value}</p>
+            {'subValue' in card && card.subValue != null && (
+              <p className="text-xs font-medium text-gray-500 mt-1 tabular-nums">{card.subValue}</p>
+            )}
           </button>
         ))}
       </div>
@@ -362,21 +429,51 @@ export default function DashboardPage() {
         <h2 className="text-sm font-semibold text-gray-700 mb-4">الملخص المالي</h2>
         <div className="space-y-3">
           {[
-            { label: 'إجمالي الفواتير',  value: stats?.totalInvoiced ?? 0, color: 'bg-gray-300' },
-            { label: 'المبالغ المحصّلة', value: stats?.totalPaid ?? 0,     color: 'bg-emerald-400' },
-            { label: 'المستحق',           value: stats?.outstanding ?? 0,   color: 'bg-red-400' },
+            { label: 'إجمالي الفواتير',  value: stats?.totalInvoicedBhd ?? 0, color: 'bg-gray-300', currency: 'BHD' as const },
+            { label: 'المبالغ المحصّلة', value: stats?.totalPaidBhd ?? 0,     color: 'bg-emerald-400', currency: 'BHD' as const },
+            { label: 'المستحق',           value: stats?.outstandingBhd ?? 0,   color: 'bg-red-400', currency: 'BHD' as const },
+            { label: 'إجمالي الفواتير',  value: stats?.totalInvoicedSar ?? 0, color: 'bg-gray-300', currency: 'SAR' as const },
+            { label: 'المبالغ المحصّلة', value: stats?.totalPaidSar ?? 0,     color: 'bg-emerald-400', currency: 'SAR' as const },
+            { label: 'المستحق',           value: stats?.outstandingSar ?? 0,   color: 'bg-red-400', currency: 'SAR' as const },
           ].map(row => (
-            <div key={row.label} className="flex items-center gap-3">
+            <div key={`${row.currency}-${row.label}`} className="flex items-center gap-3">
               <div className="w-28 text-xs text-gray-500 shrink-0">{row.label}</div>
               <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                 <div className={`h-2 rounded-full ${row.color} transition-all`}
-                  style={{ width: `${stats?.totalInvoiced ? Math.min(100, (row.value / stats.totalInvoiced) * 100) : 0}%` }} />
+                  style={{
+                    width: `${(row.currency === 'BHD' ? stats?.totalInvoicedBhd : stats?.totalInvoicedSar)
+                      ? Math.min(
+                          100,
+                          (row.value /
+                            (row.currency === 'BHD'
+                              ? (stats?.totalInvoicedBhd ?? 1)
+                              : (stats?.totalInvoicedSar ?? 1))) *
+                            100
+                        )
+                      : 0}%`,
+                  }}
+                />
               </div>
-              <div className="text-sm font-medium text-gray-700 w-36 text-left shrink-0">
-                {formatMoney(row.value, 'BHD')} BHD
+              <div className="text-sm font-medium text-gray-700 w-36 text-left shrink-0 tabular-nums">
+                {formatMoney(row.value, row.currency)} {row.currency}
               </div>
             </div>
           ))}
+          <div className="border-t border-gray-100 pt-4 mt-4 space-y-2">
+            <p className="text-xs font-semibold text-gray-600 mb-2">أرصدة الحسابات</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">إجمالي الرصيد بالدينار البحريني</span>
+              <span className="font-semibold text-emerald-700 tabular-nums">
+                {formatBhd(stats?.balanceBhd ?? 0)} BHD
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">إجمالي الرصيد بالريال السعودي</span>
+              <span className="font-semibold text-emerald-700 tabular-nums">
+                {formatSar(stats?.balanceSar ?? 0)} SAR
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

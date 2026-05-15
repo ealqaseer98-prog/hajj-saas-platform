@@ -15,6 +15,13 @@ function paymentMethodLabel(m: string | undefined): string {
   return m === 'bank_transfer' ? 'تحويل بنكي' : 'نقدي'
 }
 
+function formatSar(value: number) {
+  return Number(value ?? 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
 const fieldClass =
   'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500'
 
@@ -202,7 +209,7 @@ export default function AdahiPage() {
         <div class="row"><span class="label">رقم البطاقة:</span><span class="value">${traveller.cpr_number}</span></div>
         <div class="row"><span class="label">الوصف:</span><span class="value">${desc}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">${pm}</span></div>
-        <div class="amount">المبلغ المستلم: ${amt.toLocaleString()} ريال سعودي</div>
+        <div class="amount">المبلغ المستلم: ${formatSar(amt)} ريال سعودي</div>
         <div class="footer">
           <p>حملة العمار للحج والعمرة</p>
         </div>
@@ -272,7 +279,7 @@ export default function AdahiPage() {
                 <td>${t.full_name_ar}</td>
                 <td>${t.cpr_number}</td>
                 <td>${t.phone ?? '—'}</td>
-                <td>${isPaid ? paidAmt.toLocaleString() + ' ر.س' : '—'}</td>
+                <td>${isPaid ? formatSar(paidAmt) + ' ر.س' : '—'}</td>
                 <td class="${isPaid ? 'paid' : 'unpaid'}">${isPaid ? '✓ مدفوع' : '✗ لم يُدفع'}</td>
                 <td>${inv?.invoice_number ?? '—'}</td>
               </tr>`
@@ -281,7 +288,7 @@ export default function AdahiPage() {
         </table>
         <div class="summary">
           <p>إجمالي المدفوعين: <strong>${paidCount}</strong> حاج</p>
-          <p>إجمالي المبالغ المحصّلة: <strong>${totalSAR.toLocaleString()} ريال سعودي</strong></p>
+          <p>إجمالي المبالغ المحصّلة: <strong>${formatSar(totalSAR)} ريال سعودي</strong></p>
         </div>
         <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 1000); }</script>
       </body>
@@ -321,7 +328,7 @@ export default function AdahiPage() {
       {/* Total collected */}
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between">
         <span className="text-sm text-emerald-700 font-medium">إجمالي المبالغ المحصّلة</span>
-        <span className="text-lg font-bold text-emerald-700">{totalSAR.toLocaleString()} ر.س</span>
+        <span className="text-lg font-bold text-emerald-700">{formatSar(totalSAR)} ر.س</span>
       </div>
 
       {/* Search + Filter */}
@@ -410,7 +417,7 @@ export default function AdahiPage() {
               {/* Amount display */}
               {isPaid && (
                 <div className="mt-2 text-xs text-gray-500 flex items-center gap-4 flex-wrap">
-                  <span>المبلغ: <strong className="text-gray-700">{Number(inv.amount ?? 0).toLocaleString()} ر.س</strong></span>
+                  <span>المبلغ: <strong className="text-gray-700">{formatSar(Number(inv.amount ?? 0))} ر.س</strong></span>
                   <span>{paymentMethodLabel(Array.isArray(inv.receipts) ? inv.receipts[0]?.payment_method : (inv.receipts as any)?.payment_method)}</span>
                   <span>{inv.invoice_number}</span>
                 </div>

@@ -8,7 +8,7 @@ import type { Account } from '../types'
 function formatMoney(value: number, currency: string | undefined) {
   const c = currency ?? 'BHD'
   if (c === 'SAR') {
-    return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    return Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
   return Number(value).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
