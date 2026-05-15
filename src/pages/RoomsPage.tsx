@@ -5,10 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { ArrowRight, Plus, UserPlus, Trash2, AlertTriangle, BedDouble, Printer } from 'lucide-react'
 import type { Room, RoomAssignment, Traveller, RoomType } from '../types'
-
-const ROOM_TYPE_AR: Record<RoomType, string> = {
-  single: 'مفردة', double: 'مزدوجة', triple: 'ثلاثية', quad: 'رباعية', quint: 'خماسية',
-}
+import { ROOM_TYPE_AR, ROOM_TYPE_CAPACITY } from '../lib/roomTypes'
 
 export default function RoomsPage() {
   const { hotelId } = useParams<{ hotelId: string }>()
@@ -379,7 +376,10 @@ export default function RoomsPage() {
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">نوع الغرفة</label>
               <select className={ic} value={newRoom.room_type ?? 'quad'}
-                onChange={e => setNewRoom(r => ({ ...r, room_type: e.target.value as RoomType }))}>
+                onChange={e => {
+                  const room_type = e.target.value as RoomType
+                  setNewRoom(r => ({ ...r, room_type, capacity: ROOM_TYPE_CAPACITY[room_type] }))
+                }}>
                 {Object.entries(ROOM_TYPE_AR).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>

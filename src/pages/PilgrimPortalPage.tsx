@@ -2,6 +2,7 @@
 // Public-facing portal for pilgrims to login with CPR and view their info
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { roomTypeLabel } from '../lib/roomTypes'
 import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut } from 'lucide-react'
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
@@ -156,9 +157,6 @@ export default function PilgrimPortalPage() {
     setError('')
   }
 
-  const ROOM_TYPE_AR: Record<string, string> = {
-    single: 'مفردة', double: 'مزدوجة', triple: 'ثلاثية', quad: 'رباعية', quint: 'خماسية'
-  }
 
   return (
     <div className="min-h-screen bg-emerald-50 flex flex-col" dir="rtl">
@@ -317,7 +315,7 @@ export default function PilgrimPortalPage() {
                             <span className="text-purple-500">الطابق {ra.room.floor}</span>
                           )}
                           <span className="text-purple-500">
-                            {ROOM_TYPE_AR[ra.room?.room_type] ?? ra.room?.room_type}
+                            {roomTypeLabel(ra.room?.room_type)}
                           </span>
                         </div>
                       </div>

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { Printer, Download, Users, Plane, Filter } from 'lucide-react'
 import type { Trip } from '../types'
+import { roomTypeLabel } from '../lib/roomTypes'
 
 export default function TripManifestPage() {
   const [selectedTrip, setSelectedTrip] = useState<string>('')
@@ -222,7 +223,9 @@ export default function TripManifestPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                       {hotel.rooms?.map((room: any) => (
                         <div key={room.id} className="border border-gray-200 rounded-lg p-2">
-                          <p className="text-xs font-bold text-gray-600 mb-1">غرفة {room.room_number}</p>
+                          <p className="text-xs font-bold text-gray-600 mb-1">
+                            غرفة {room.room_number} — {roomTypeLabel(room.room_type)}
+                          </p>
                           {room.assignments?.map((a: any) => (
                             <p key={a.id} className="text-xs text-gray-700">
                               {travellers.find((t: any) => t.id === a.traveller_id)?.full_name_ar ?? '—'}

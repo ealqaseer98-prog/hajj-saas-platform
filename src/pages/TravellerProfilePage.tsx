@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { ArrowRight, Phone, Mail, Plane, FileText, Receipt, History, FileStack, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import type { Traveller, Invoice, TravellerTrip } from '../types'
+import { roomTypeLabel } from '../lib/roomTypes'
 
 type TabKey = 'overview' | 'financial' | 'visa' | 'documents'
 
@@ -208,7 +209,9 @@ export default function TravellerProfilePage() {
               ? <p className="text-sm text-gray-400 py-3">لم يتم تعيين غرفة</p>
               : rooms.map((ra: any) => (
                 <div key={ra.id} className="py-2.5 border-b border-gray-50 last:border-0 text-sm">
-                  <p className="font-medium text-gray-800">{ra.room?.hotel?.hotel_name} — غرفة {ra.room?.room_number}</p>
+                  <p className="font-medium text-gray-800">
+                    {ra.room?.hotel?.hotel_name} — غرفة {ra.room?.room_number} ({roomTypeLabel(ra.room?.room_type)})
+                  </p>
                   <p className="text-xs text-gray-400">{ra.room?.hotel?.city}</p>
                 </div>
               ))
