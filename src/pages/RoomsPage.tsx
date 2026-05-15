@@ -601,19 +601,21 @@ export default function RoomsPage() {
 
       {/* Switch room modal */}
       {switchRoom && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3 overflow-visible" dir="rtl">
-            <h2 className="text-lg font-bold">نقل الحاج إلى غرفة أخرى</h2>
-            <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">
-              {switchRoom.travellerName}
-            </p>
-            <div
-              className={`relative overflow-visible ${
-                switchRoomListOpen && matchingSwitchRooms.length > 0 ? 'z-50 pb-52' : 'z-10'
-              }`}
-            >
-              <label className="block text-xs font-medium text-gray-600 mb-1">الغرفة الوجهة</label>
-              <input
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div
+            className="flex max-h-[90vh] w-full max-w-sm flex-col rounded-2xl bg-white shadow-2xl"
+            dir="rtl"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-6">
+              <h2 className="text-lg font-bold">نقل الحاج إلى غرفة أخرى</h2>
+              <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium text-gray-800">
+                {switchRoom.travellerName}
+              </p>
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-600">الغرفة الوجهة</label>
+                <input
                 type="text"
                 className={ic}
                 value={switchRoomSearch}
@@ -631,7 +633,7 @@ export default function RoomsPage() {
               {switchRoomListOpen && matchingSwitchRooms.length > 0 && (
                 <ul
                   role="listbox"
-                  className="absolute left-0 right-0 top-full z-50 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+                  className="w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 shadow-inner"
                 >
                   {matchingSwitchRooms.map((r: any) => {
                     const occ = (r.assignments ?? []).length
@@ -645,7 +647,7 @@ export default function RoomsPage() {
                             setSwitchRoomSearch(String(r.room_number))
                             setSwitchRoomListOpen(false)
                           }}
-                          className={`w-full border-b border-gray-50 px-3 py-2 text-right text-sm last:border-0 hover:bg-emerald-50 ${
+                          className={`w-full border-b border-gray-200 px-3 py-2.5 text-right text-sm last:border-0 hover:bg-emerald-50 active:bg-emerald-100 ${
                             selected ? 'bg-emerald-50 font-medium text-emerald-800' : 'text-gray-800'
                           }`}
                         >
@@ -662,16 +664,17 @@ export default function RoomsPage() {
               {switchRoomSearch.trim() && matchingSwitchRooms.length === 0 && (
                 <p className="text-xs text-gray-500 mt-1">لا توجد غرفة مطابقة أو الغرفة ممتلئة</p>
               )}
-              {!switchRoomSearch.trim() && switchDestRooms.length > 0 && (
-                <p className="text-xs text-gray-500 mt-1">ابدأ بكتابة رقم الغرفة للبحث</p>
+              {!switchRoomSearch.trim() && switchDestRooms.length > 0 && !switchRoomListOpen && (
+                <p className="text-xs text-gray-500">ابدأ بكتابة رقم الغرفة للبحث</p>
               )}
               {switchDestRooms.length === 0 && (
-                <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mt-1">
+                <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-600">
                   لا توجد غرف متاحة للنقل في هذا الفندق
                 </p>
               )}
+              </div>
             </div>
-            <div className="relative z-0 flex gap-3 pt-2">
+            <div className="flex shrink-0 gap-3 border-t border-gray-100 p-4">
               <button
                 type="button"
                 onClick={() => {
