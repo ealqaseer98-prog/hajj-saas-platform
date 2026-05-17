@@ -305,6 +305,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
 
 // ── HISTORY TAB ───────────────────────────────────────────────────────────────
 function HistoryTab({ history, search, setSearch, qc }: any) {
+  const isDriverRole = useAuthStore(s => s.user?.role) === 'driver'
   const [editRecord, setEditRecord] = useState<any>(null)
   const [editForm, setEditForm]     = useState({
     driver_name: '', notes: '', checkout_time: '', checkin_time: '', status: 'returned' as 'out' | 'returned',
@@ -431,14 +432,18 @@ function HistoryTab({ history, search, setSearch, qc }: any) {
                     {km && <p>المسافة: <strong className="text-gray-700">{km} كم</strong></p>}
                     {duration && <p>المدة: <strong className="text-gray-700">{duration} دقيقة</strong></p>}
                   </div>
-                  <button onClick={() => openEdit(u)}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="تعديل">
-                    <Edit2 size={15} />
-                  </button>
-                  <button onClick={() => window.confirm('حذف هذا السجل؟') && del.mutate(u.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="حذف">
-                    <Trash2 size={15} />
-                  </button>
+                  {!isDriverRole && (
+                    <>
+                      <button onClick={() => openEdit(u)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="تعديل">
+                        <Edit2 size={15} />
+                      </button>
+                      <button onClick={() => window.confirm('حذف هذا السجل؟') && del.mutate(u.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="حذف">
+                        <Trash2 size={15} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="mt-2 flex gap-4 text-xs text-gray-400">
@@ -460,7 +465,7 @@ function HistoryTab({ history, search, setSearch, qc }: any) {
         })}
       </div>
 
-      {editRecord && (
+      {editRecord && !isDriverRole && (
         <Modal title={`تعديل السجل — ${editRecord.car?.name}`} onClose={() => setEditRecord(null)}
           onSave={() => saveEdit.mutate()} saving={saveEdit.isPending}
           disabled={!editForm.driver_name || !editForm.checkout_time}>
