@@ -103,6 +103,8 @@ export default function CarUsagePage() {
 // ── ACTIVE TAB ────────────────────────────────────────────────────────────────
 function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
   const fullName = useAuthStore(s => s.user?.full_name ?? '')
+  const isDriver = (driverName: string | null | undefined) =>
+    fullName.trim() === (driverName ?? '').trim()
   const [checkoutModal, setCheckoutModal] = useState(false)
   const [checkinModal,  setCheckinModal]  = useState<any>(null)
   const [form, setForm] = useState({ car_id: '', driver_name: '', notes: '' })
@@ -152,6 +154,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
 
   const checkin = useMutation({
     mutationFn: async () => {
+      if (!isDriver(checkinModal?.driver_name)) throw new Error('غير مصرح بتسجيل العودة')
       setUploading(true)
       await supabase.from('car_usage').update({
         checkin_time: new Date().toISOString(),
@@ -205,10 +208,16 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
                   </p>
                   {u.checkout_km && <p className="text-xs text-gray-400">عداد الخروج: {u.checkout_km} كم</p>}
                 </div>
-                <button onClick={() => setCheckinModal(u)}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                  <LogIn size={15} /> تسجيل عودة
-                </button>
+                {isDriver(u.driver_name) ? (
+                  <button onClick={() => setCheckinModal(u)}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                    <LogIn size={15} /> تسجيل عودة
+                  </button>
+                ) : (
+                  <span className="px-3 py-2 rounded-lg text-xs font-medium bg-gray-100 text-gray-500">
+                    مسجل بواسطة شخص آخر
+                  </span>
+                )}
               </div>
               {/* Checkout photos */}
               {u.photos?.filter((p: any) => p.photo_type === 'checkout').length > 0 && (
