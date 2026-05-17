@@ -36,13 +36,13 @@ function DefaultHomeRedirect() {
   return <Navigate to={isDriver(role) ? '/cars' : '/dashboard'} replace />
 }
 
-function DriverRouteGuard() {
-  const role = useAuthStore(s => s.user?.role)
+function DriverRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore(s => s.user)
   const { pathname } = useLocation()
-  if (isDriver(role) && !isPathAllowedForDriver(pathname)) {
+  if (user?.role === 'driver' && !isPathAllowedForDriver(pathname)) {
     return <Navigate to="/cars" replace />
   }
-  return <Outlet />
+  return <>{children}</>
 }
 
 export default function App() {
@@ -53,7 +53,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/pilgrim" element={<PilgrimPortalPage />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route element={<DriverRouteGuard />}>
+            <Route element={<DriverRoute><Outlet /></DriverRoute>}>
             <Route index element={<DefaultHomeRedirect />} />
             <Route path="dashboard"              element={<DashboardPage />} />
             <Route path="travellers"             element={<TravellersPage />} />

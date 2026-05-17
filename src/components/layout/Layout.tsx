@@ -44,10 +44,21 @@ const navSections = [
   },
 ]
 
+function getVisibleNav(role: string | undefined) {
+  if (role === 'driver') {
+    const carsItems = navSections
+      .flatMap(section => section.items)
+      .filter(item => item.to === '/cars')
+    if (carsItems.length === 0) return []
+    return [{ label: 'السيارات', items: carsItems }]
+  }
+  return filterNavSectionsForRole(navSections, role)
+}
+
 export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
-  const visibleNav = filterNavSectionsForRole(navSections, user?.role)
+  const visibleNav = getVisibleNav(user?.role)
   const mobileNavItems = visibleNav.flatMap(section => section.items)
 
   const handleLogout = () => {
