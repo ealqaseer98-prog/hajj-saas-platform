@@ -1,5 +1,5 @@
 // src/pages/CarUsagePage.tsx
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
@@ -12,7 +12,12 @@ type Tab = 'active' | 'history' | 'cars'
 
 export default function CarUsagePage() {
   const qc = useQueryClient()
+  const isDriverRole = useAuthStore(s => s.user?.role) === 'driver'
   const [tab, setTab] = useState<Tab>('active')
+
+  useEffect(() => {
+    if (isDriverRole && tab === 'cars') setTab('active')
+  }, [isDriverRole, tab])
 
   // ── Fetch cars ────────────────────────────────────────────────────────────
   const { data: cars = [] } = useQuery({
@@ -82,7 +87,7 @@ export default function CarUsagePage() {
         {([
           ['active',  'السيارات الخارجة', <Car size={14} />],
           ['history', 'السجل',            <FileText size={14} />],
-          ['cars',    'السيارات',          <Plus size={14} />],
+          ...(!isDriverRole ? [['cars', 'السيارات', <Plus size={14} />] as const] : []),
         ] as const).map(([key, label, icon]) => (
           <button key={key} onClick={() => setTab(key as Tab)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -95,7 +100,7 @@ export default function CarUsagePage() {
 
       {tab === 'active'  && <ActiveTab cars={cars} availableCars={availableCars} activeUsages={activeUsages} qc={qc} />}
       {tab === 'history' && <HistoryTab history={filteredHistory} search={historySearch} setSearch={setHistorySearch} qc={qc} />}
-      {tab === 'cars'    && <CarsTab cars={cars} qc={qc} />}
+      {tab === 'cars' && !isDriverRole && <CarsTab cars={cars} qc={qc} />}
     </div>
   )
 }
@@ -502,14 +507,54 @@ function HistoryTab({ history, search, setSearch, qc }: any) {
   )
 }
 
+const CAR_FORM_FIELDS = [
+  ['اسم السيارة *', 'name'],
+  ['رقم اللوحة *', 'plate'],
+  ['الموديل', 'model'],
+  ['اللون', 'color'],
+] as const
+
+const emptyCarForm = () => ({ name: '', plate: '', model: '', color: '' })
+
 // ── CARS MANAGEMENT TAB ───────────────────────────────────────────────────────
 function CarsTab({ cars, qc }: any) {
-  const [modal, setModal] = useState(false)
-  const [form, setForm]   = useState({ name: '', plate: '', model: '', color: '' })
+  const isDriverRole = useAuthStore(s => s.user?.role) === 'driver'
+  const [addModal, setAddModal] = useState(false)
+  const [editCar, setEditCar]   = useState<any>(null)
+  const [form, setForm]         = useState(emptyCarForm())
+
+  const openEdit = (car: any) => {
+    setForm({
+      name:  car.name ?? '',
+      plate: car.plate ?? '',
+      model: car.model ?? '',
+      color: car.color ?? '',
+    })
+    setEditCar(car)
+  }
 
   const addCar = useMutation({
     mutationFn: () => supabase.from('cars').insert(form).throwOnError(),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['cars'] }); setModal(false); setForm({ name: '', plate: '', model: '', color: '' }) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cars'] })
+      setAddModal(false)
+      setForm(emptyCarForm())
+    },
+  })
+
+  const updateCar = useMutation({
+    mutationFn: () =>
+      supabase.from('cars').update({
+        name:  form.name,
+        plate: form.plate,
+        model: form.model || null,
+        color: form.color || null,
+      }).eq('id', editCar.id).throwOnError(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cars'] })
+      setEditCar(null)
+      setForm(emptyCarForm())
+    },
   })
 
   const toggleCar = useMutation({
@@ -519,12 +564,14 @@ function CarsTab({ cars, qc }: any) {
 
   return (
     <>
-      <div className="flex justify-end">
-        <button onClick={() => setModal(true)}
-          className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          <Plus size={15} /> إضافة سيارة
-        </button>
-      </div>
+      {!isDriverRole && (
+        <div className="flex justify-end">
+          <button onClick={() => { setForm(emptyCarForm()); setAddModal(true) }}
+            className="flex items-center gap-2 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            <Plus size={15} /> إضافة سيارة
+          </button>
+        </div>
+      )}
 
       <div className="grid gap-3">
         {cars.map((car: any) => (
@@ -533,22 +580,43 @@ function CarsTab({ cars, qc }: any) {
               <p className="font-bold text-gray-800">{car.name}</p>
               <p className="text-sm text-gray-500">{car.plate} {car.model && `· ${car.model}`} {car.color && `· ${car.color}`}</p>
             </div>
-            <button onClick={() => toggleCar.mutate(car)}
-              className={`text-xs px-3 py-1.5 rounded-lg font-medium ${car.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
-              {car.is_active ? 'تعطيل' : 'تفعيل'}
-            </button>
+            {!isDriverRole && (
+              <div className="flex items-center gap-2">
+                <button onClick={() => openEdit(car)}
+                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="تعديل">
+                  <Edit2 size={15} />
+                </button>
+                <button onClick={() => toggleCar.mutate(car)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium ${car.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                  {car.is_active ? 'تعطيل' : 'تفعيل'}
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      {modal && (
-        <Modal title="إضافة سيارة جديدة" onClose={() => setModal(false)}
+      {addModal && (
+        <Modal title="إضافة سيارة جديدة" onClose={() => setAddModal(false)}
           onSave={() => addCar.mutate()} saving={addCar.isPending}
           disabled={!form.name || !form.plate}>
-          {[['اسم السيارة *','name'],['رقم اللوحة *','plate'],['الموديل','model'],['اللون','color']].map(([label, key]) => (
+          {CAR_FORM_FIELDS.map(([label, key]) => (
             <div key={key}>
               <label className={lbl}>{label}</label>
-              <input className={ic} value={(form as any)[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+              <input className={ic} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+            </div>
+          ))}
+        </Modal>
+      )}
+
+      {editCar && (
+        <Modal title={`تعديل السيارة — ${editCar.name}`} onClose={() => { setEditCar(null); setForm(emptyCarForm()) }}
+          onSave={() => updateCar.mutate()} saving={updateCar.isPending}
+          disabled={!form.name || !form.plate}>
+          {CAR_FORM_FIELDS.map(([label, key]) => (
+            <div key={key}>
+              <label className={lbl}>{label}</label>
+              <input className={ic} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
             </div>
           ))}
         </Modal>
