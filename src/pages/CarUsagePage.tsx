@@ -107,7 +107,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
     fullName.trim() === (driverName ?? '').trim()
   const [checkoutModal, setCheckoutModal] = useState(false)
   const [checkinModal,  setCheckinModal]  = useState<any>(null)
-  const [form, setForm] = useState({ car_id: '', driver_name: '', notes: '' })
+  const [form, setForm] = useState({ car_id: '', notes: '' })
   const [checkinForm, setCheckinForm]     = useState({ notes: '' })
   const checkoutPhotoRef = useRef<HTMLInputElement>(null)
   const checkinPhotoRef  = useRef<HTMLInputElement>(null)
@@ -134,7 +134,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
       setUploading(true)
       const { data, error } = await supabase.from('car_usage').insert({
         car_id:       form.car_id,
-        driver_name:  form.driver_name,
+        driver_name:  fullName.trim(),
         notes:        form.notes || null,
         checkout_time: new Date().toISOString(),
         status:       'out',
@@ -146,7 +146,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['car-usage-active'] })
       setCheckoutModal(false)
-      setForm({ car_id: '', driver_name: '', notes: '' })
+      setForm({ car_id: '', notes: '' })
       setCheckoutPhotos([])
     },
     onError: () => setUploading(false),
@@ -178,7 +178,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
     <>
       <div className="flex justify-between items-center">
         <h2 className="text-sm font-semibold text-gray-700">السيارات المتاحة: {availableCars.length}</h2>
-        <button onClick={() => { setForm({ car_id: '', driver_name: fullName, notes: '' }); setCheckoutModal(true) }} disabled={availableCars.length === 0}
+        <button onClick={() => { setForm({ car_id: '', notes: '' }); setCheckoutModal(true) }} disabled={availableCars.length === 0}
           className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40">
           <LogOut size={15} /> تسجيل خروج سيارة
         </button>
@@ -238,7 +238,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
       {checkoutModal && (
         <Modal title="تسجيل خروج سيارة" onClose={() => setCheckoutModal(false)}
           onSave={() => checkout.mutate()} saving={uploading || checkout.isPending}
-          disabled={!form.car_id || !form.driver_name}>
+          disabled={!form.car_id || !fullName.trim()}>
           <div>
             <label className={lbl}>السيارة *</label>
             <select className={ic} value={form.car_id} onChange={e => setForm(f => ({ ...f, car_id: e.target.value }))}>
@@ -248,9 +248,8 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
               ))}
             </select>
           </div>
-          <div>
-            <label className={lbl}>اسم السائق *</label>
-            <input className={ic} value={form.driver_name} onChange={e => setForm(f => ({ ...f, driver_name: e.target.value }))} />
+          <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-700">
+            السائق: <strong>{fullName || '—'}</strong>
           </div>
           <div>
             <label className={lbl}>ملاحظات</label>
