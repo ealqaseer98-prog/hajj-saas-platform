@@ -48,6 +48,7 @@ export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const visibleNav = filterNavSectionsForRole(navSections, user?.role)
+  const mobileNavItems = visibleNav.flatMap(section => section.items)
 
   const handleLogout = () => {
     logout()
@@ -56,8 +57,11 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-50" dir="rtl">
-      {/* Sidebar */}
-      <aside className="w-62 bg-emerald-900 text-white flex flex-col shrink-0" style={{ width: '248px' }}>
+      {/* Sidebar — desktop only */}
+      <aside
+        className="hidden md:flex flex-col shrink-0 bg-emerald-900 text-white"
+        style={{ width: '248px' }}
+      >
         {/* Header */}
         <div className="p-4 border-b border-emerald-800">
           <div className="flex items-center gap-3">
@@ -112,9 +116,43 @@ export default function Layout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
         <Outlet />
       </main>
+
+      {/* Bottom nav — mobile only */}
+      <nav
+        className="fixed bottom-0 inset-x-0 md:hidden z-50 bg-emerald-900 border-t border-emerald-800 text-white"
+        aria-label="التنقل الرئيسي"
+      >
+        <div className="flex items-stretch overflow-x-auto">
+          {mobileNavItems.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                clsx(
+                  'flex flex-1 flex-col items-center justify-center gap-0.5 min-w-[4.5rem] px-2 py-2.5 text-[10px] transition-colors',
+                  isActive
+                    ? 'bg-emerald-700 text-white font-semibold'
+                    : 'text-emerald-100 hover:bg-emerald-800'
+                )
+              }
+            >
+              <Icon size={18} className="shrink-0" />
+              <span className="truncate max-w-full text-center leading-tight">{label}</span>
+            </NavLink>
+          ))}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 min-w-[4.5rem] px-2 py-2.5 text-[10px] text-emerald-100 hover:bg-emerald-800 transition-colors"
+          >
+            <LogOut size={18} className="shrink-0" />
+            <span className="leading-tight">خروج</span>
+          </button>
+        </div>
+      </nav>
     </div>
   )
 }
