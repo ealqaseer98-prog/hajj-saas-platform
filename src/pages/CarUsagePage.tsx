@@ -2,7 +2,8 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Car, LogIn, LogOut, Camera, FileText, Plus, Printer, Search } from 'lucide-react'
+import { useAuthStore } from '../store/authStore'
+import { Car, LogIn, LogOut, Camera, FileText, Plus, Printer, Search, Edit2, Trash2 } from 'lucide-react'
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 const BUCKET   = 'car-photos'
@@ -52,7 +53,7 @@ export default function CarUsagePage() {
 
   const filteredHistory = history.filter((u: any) =>
     !historySearch || u.driver_name?.includes(historySearch) ||
-    u.car?.name?.includes(historySearch) || u.destination?.includes(historySearch)
+    u.car?.name?.includes(historySearch)
   )
 
   // Available cars (not currently out)
@@ -93,7 +94,7 @@ export default function CarUsagePage() {
       </div>
 
       {tab === 'active'  && <ActiveTab cars={cars} availableCars={availableCars} activeUsages={activeUsages} qc={qc} />}
-      {tab === 'history' && <HistoryTab history={filteredHistory} search={historySearch} setSearch={setHistorySearch} />}
+      {tab === 'history' && <HistoryTab history={filteredHistory} search={historySearch} setSearch={setHistorySearch} qc={qc} />}
       {tab === 'cars'    && <CarsTab cars={cars} qc={qc} />}
     </div>
   )
@@ -101,10 +102,11 @@ export default function CarUsagePage() {
 
 // ── ACTIVE TAB ────────────────────────────────────────────────────────────────
 function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
+  const fullName = useAuthStore(s => s.user?.full_name ?? '')
   const [checkoutModal, setCheckoutModal] = useState(false)
   const [checkinModal,  setCheckinModal]  = useState<any>(null)
-  const [form, setForm] = useState({ car_id: '', driver_name: '', destination: '', checkout_km: '', notes: '' })
-  const [checkinForm, setCheckinForm]     = useState({ checkin_km: '', notes: '' })
+  const [form, setForm] = useState({ car_id: '', driver_name: '', notes: '' })
+  const [checkinForm, setCheckinForm]     = useState({ notes: '' })
   const checkoutPhotoRef = useRef<HTMLInputElement>(null)
   const checkinPhotoRef  = useRef<HTMLInputElement>(null)
   const [checkoutPhotos, setCheckoutPhotos] = useState<File[]>([])
@@ -131,8 +133,6 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
       const { data, error } = await supabase.from('car_usage').insert({
         car_id:       form.car_id,
         driver_name:  form.driver_name,
-        destination:  form.destination || null,
-        checkout_km:  form.checkout_km ? +form.checkout_km : null,
         notes:        form.notes || null,
         checkout_time: new Date().toISOString(),
         status:       'out',
@@ -144,7 +144,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['car-usage-active'] })
       setCheckoutModal(false)
-      setForm({ car_id: '', driver_name: '', destination: '', checkout_km: '', notes: '' })
+      setForm({ car_id: '', driver_name: '', notes: '' })
       setCheckoutPhotos([])
     },
     onError: () => setUploading(false),
@@ -155,7 +155,6 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
       setUploading(true)
       await supabase.from('car_usage').update({
         checkin_time: new Date().toISOString(),
-        checkin_km:   checkinForm.checkin_km ? +checkinForm.checkin_km : null,
         notes:        checkinForm.notes || null,
         status:       'returned',
       }).eq('id', checkinModal.id).throwOnError()
@@ -166,7 +165,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
       qc.invalidateQueries({ queryKey: ['car-usage-active'] })
       qc.invalidateQueries({ queryKey: ['car-usage-history'] })
       setCheckinModal(null)
-      setCheckinForm({ checkin_km: '', notes: '' })
+      setCheckinForm({ notes: '' })
       setCheckinPhotos([])
     },
     onError: () => setUploading(false),
@@ -176,7 +175,7 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
     <>
       <div className="flex justify-between items-center">
         <h2 className="text-sm font-semibold text-gray-700">السيارات المتاحة: {availableCars.length}</h2>
-        <button onClick={() => setCheckoutModal(true)} disabled={availableCars.length === 0}
+        <button onClick={() => { setForm({ car_id: '', driver_name: fullName, notes: '' }); setCheckoutModal(true) }} disabled={availableCars.length === 0}
           className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40">
           <LogOut size={15} /> تسجيل خروج سيارة
         </button>
@@ -245,14 +244,6 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
             <input className={ic} value={form.driver_name} onChange={e => setForm(f => ({ ...f, driver_name: e.target.value }))} />
           </div>
           <div>
-            <label className={lbl}>الوجهة</label>
-            <input className={ic} value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} placeholder="مثال: فندق مكة، المطار..." />
-          </div>
-          <div>
-            <label className={lbl}>قراءة العداد عند الخروج (كم)</label>
-            <input className={ic} type="number" value={form.checkout_km} onChange={e => setForm(f => ({ ...f, checkout_km: e.target.value }))} />
-          </div>
-          <div>
             <label className={lbl}>ملاحظات</label>
             <textarea className={ic + ' resize-none'} rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
@@ -281,11 +272,6 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
             <p className="text-xs text-gray-400">خرج: {new Date(checkinModal.checkout_time).toLocaleString('ar-BH')}</p>
           </div>
           <div>
-            <label className={lbl}>قراءة العداد عند العودة (كم)</label>
-            <input className={ic} type="number" value={checkinForm.checkin_km}
-              onChange={e => setCheckinForm(f => ({ ...f, checkin_km: e.target.value }))} />
-          </div>
-          <div>
             <label className={lbl}>ملاحظات</label>
             <textarea className={ic + ' resize-none'} rows={2} value={checkinForm.notes}
               onChange={e => setCheckinForm(f => ({ ...f, notes: e.target.value }))} />
@@ -309,7 +295,47 @@ function ActiveTab({ cars, availableCars, activeUsages, qc }: any) {
 }
 
 // ── HISTORY TAB ───────────────────────────────────────────────────────────────
-function HistoryTab({ history, search, setSearch }: any) {
+function HistoryTab({ history, search, setSearch, qc }: any) {
+  const [editRecord, setEditRecord] = useState<any>(null)
+  const [editForm, setEditForm]     = useState({
+    driver_name: '', notes: '', checkout_time: '', checkin_time: '', status: 'returned' as 'out' | 'returned',
+  })
+
+  const openEdit = (u: any) => {
+    setEditForm({
+      driver_name:   u.driver_name ?? '',
+      notes:         u.notes ?? '',
+      checkout_time: toDatetimeLocal(u.checkout_time),
+      checkin_time:  toDatetimeLocal(u.checkin_time),
+      status:        u.status === 'out' ? 'out' : 'returned',
+    })
+    setEditRecord(u)
+  }
+
+  const saveEdit = useMutation({
+    mutationFn: async () => {
+      await supabase.from('car_usage').update({
+        driver_name:   editForm.driver_name,
+        notes:         editForm.notes || null,
+        checkout_time: fromDatetimeLocal(editForm.checkout_time),
+        checkin_time:  editForm.checkin_time ? fromDatetimeLocal(editForm.checkin_time) : null,
+        status:        editForm.status,
+      }).eq('id', editRecord.id).throwOnError()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['car-usage-history'] })
+      qc.invalidateQueries({ queryKey: ['car-usage-active'] })
+      setEditRecord(null)
+    },
+  })
+
+  const del = useMutation({
+    mutationFn: (id: string) => supabase.from('car_usage').delete().eq('id', id).throwOnError(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['car-usage-history'] })
+      qc.invalidateQueries({ queryKey: ['car-usage-active'] })
+    },
+  })
   const printReport = () => {
     const win = window.open('', '_blank')
     if (!win) return
@@ -337,22 +363,17 @@ function HistoryTab({ history, search, setSearch }: any) {
         </div>
         <table>
           <thead><tr>
-            <th>#</th><th>السيارة</th><th>السائق</th><th>الوجهة</th>
-            <th>وقت الخروج</th><th>وقت العودة</th><th>المسافة (كم)</th>
+            <th>#</th><th>السيارة</th><th>السائق</th>
+            <th>وقت الخروج</th><th>وقت العودة</th>
           </tr></thead>
           <tbody>
-            ${history.map((u: any, i: number) => {
-              const km = u.checkin_km && u.checkout_km ? (u.checkin_km - u.checkout_km).toFixed(1) : '—'
-              return `<tr>
+            ${history.map((u: any, i: number) => `<tr>
                 <td>${i+1}</td>
                 <td>${u.car?.name ?? '—'}</td>
                 <td>${u.driver_name}</td>
-                <td>${u.destination ?? '—'}</td>
                 <td>${new Date(u.checkout_time).toLocaleString('ar-BH')}</td>
                 <td>${u.checkin_time ? new Date(u.checkin_time).toLocaleString('ar-BH') : '—'}</td>
-                <td>${km}</td>
-              </tr>`
-            }).join('')}
+              </tr>`).join('')}
           </tbody>
         </table>
         <p style="margin-top:10px">إجمالي الرحلات: <strong>${history.length}</strong></p>
@@ -368,7 +389,7 @@ function HistoryTab({ history, search, setSearch }: any) {
         <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder="ابحث بالسائق، السيارة، أو الوجهة..."
+            placeholder="ابحث بالسائق أو السيارة..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <button onClick={printReport}
@@ -396,9 +417,19 @@ function HistoryTab({ history, search, setSearch }: any) {
                   <p className="text-sm text-gray-600 mt-0.5">السائق: <strong>{u.driver_name}</strong></p>
                   {u.destination && <p className="text-sm text-gray-500">الوجهة: {u.destination}</p>}
                 </div>
-                <div className="text-left text-xs text-gray-400 space-y-0.5">
-                  {km && <p>المسافة: <strong className="text-gray-700">{km} كم</strong></p>}
-                  {duration && <p>المدة: <strong className="text-gray-700">{duration} دقيقة</strong></p>}
+                <div className="flex items-start gap-2">
+                  <div className="text-left text-xs text-gray-400 space-y-0.5">
+                    {km && <p>المسافة: <strong className="text-gray-700">{km} كم</strong></p>}
+                    {duration && <p>المدة: <strong className="text-gray-700">{duration} دقيقة</strong></p>}
+                  </div>
+                  <button onClick={() => openEdit(u)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="تعديل">
+                    <Edit2 size={15} />
+                  </button>
+                  <button onClick={() => window.confirm('حذف هذا السجل؟') && del.mutate(u.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="حذف">
+                    <Trash2 size={15} />
+                  </button>
                 </div>
               </div>
               <div className="mt-2 flex gap-4 text-xs text-gray-400">
@@ -419,6 +450,41 @@ function HistoryTab({ history, search, setSearch }: any) {
           )
         })}
       </div>
+
+      {editRecord && (
+        <Modal title={`تعديل السجل — ${editRecord.car?.name}`} onClose={() => setEditRecord(null)}
+          onSave={() => saveEdit.mutate()} saving={saveEdit.isPending}
+          disabled={!editForm.driver_name || !editForm.checkout_time}>
+          <div>
+            <label className={lbl}>اسم السائق *</label>
+            <input className={ic} value={editForm.driver_name}
+              onChange={e => setEditForm(f => ({ ...f, driver_name: e.target.value }))} />
+          </div>
+          <div>
+            <label className={lbl}>وقت الخروج *</label>
+            <input className={ic} type="datetime-local" value={editForm.checkout_time}
+              onChange={e => setEditForm(f => ({ ...f, checkout_time: e.target.value }))} />
+          </div>
+          <div>
+            <label className={lbl}>وقت العودة</label>
+            <input className={ic} type="datetime-local" value={editForm.checkin_time}
+              onChange={e => setEditForm(f => ({ ...f, checkin_time: e.target.value }))} />
+          </div>
+          <div>
+            <label className={lbl}>الحالة</label>
+            <select className={ic} value={editForm.status}
+              onChange={e => setEditForm(f => ({ ...f, status: e.target.value as 'out' | 'returned' }))}>
+              <option value="returned">عادت</option>
+              <option value="out">في الخارج</option>
+            </select>
+          </div>
+          <div>
+            <label className={lbl}>ملاحظات</label>
+            <textarea className={ic + ' resize-none'} rows={2} value={editForm.notes}
+              onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+        </Modal>
+      )}
     </>
   )
 }
@@ -476,6 +542,19 @@ function CarsTab({ cars, qc }: any) {
       )}
     </>
   )
+}
+
+
+function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function fromDatetimeLocal(local: string): string | null {
+  if (!local) return null
+  return new Date(local).toISOString()
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
