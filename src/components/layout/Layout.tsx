@@ -7,6 +7,7 @@ import {
   MessageSquare, ClipboardList, Beef, Car
 } from 'lucide-react'
 import clsx from 'clsx'
+import { filterNavSectionsForRole } from '../../lib/permissions'
 
 const navSections = [
   {
@@ -46,6 +47,7 @@ const navSections = [
 export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const visibleNav = filterNavSectionsForRole(navSections, user?.role)
 
   const handleLogout = () => {
     logout()
@@ -69,7 +71,7 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
-          {navSections.map(section => (
+          {visibleNav.map(section => (
             <div key={section.label}>
               <p className="text-emerald-400 text-xs font-semibold px-3 mb-1 uppercase tracking-wider">
                 {section.label}

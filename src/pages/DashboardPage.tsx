@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Users, Plane, Wallet, AlertCircle, FileWarning, Bell, CheckCircle2, Clock } from 'lucide-react'
+import { Users, Plane, Wallet, AlertCircle, FileWarning, Bell, CheckCircle2, Clock, Car } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 
 type DashboardCurrency = 'BHD' | 'SAR'
@@ -34,16 +34,47 @@ function invoiceOutstanding(inv: { amount: unknown; amount_paid: unknown }) {
   return Math.max(0, Number(inv.amount ?? 0) - Number(inv.amount_paid ?? 0))
 }
 
+function DriverDashboard({ user }: { user: { full_name?: string | null; username?: string } | null }) {
+  const navigate = useNavigate()
+  const greeting = () => {
+    const h = new Date().getHours()
+    if (h < 12) return 'صباح الخير'
+    if (h < 17) return 'مساء الخير'
+    return 'مساء النور'
+  }
+
+  return (
+    <div className="p-6" dir="rtl">
+      <div className="max-w-lg mx-auto bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center space-y-4">
+        <h1 className="text-2xl font-bold text-gray-800">
+          {greeting()}، {user?.full_name ?? user?.username} 👋
+        </h1>
+        <p className="text-gray-500 text-sm">مرحبًا بك في نظام إدارة السيارات</p>
+        <button
+          onClick={() => navigate('/cars')}
+          className="inline-flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-6 py-3 rounded-xl text-sm font-medium transition-colors"
+        >
+          <Car size={18} />
+          الذهاب إلى السيارات
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const { user }  = useAuthStore()
   const navigate  = useNavigate()
+  const isDriverRole = user?.role === 'driver'
   const isAdmin   = user?.role === 'admin'
+
   const [genderFilter, setGenderFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
   const [permitFilter, setPermitFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
 
   // ── Main stats ──────────────────────────────────────────────────────────────
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
+    enabled: !isDriverRole,
     queryFn: async () => {
       const [
         { data: travellerData },
@@ -120,6 +151,7 @@ export default function DashboardPage() {
   // ── Overdue invoices ────────────────────────────────────────────────────────
   const { data: overdueInvoices = [] } = useQuery({
     queryKey: ['overdue-invoices'],
+    enabled: !isDriverRole,
     queryFn: async () => {
       const today = new Date().toISOString().slice(0, 10)
       const { data } = await supabase
@@ -136,6 +168,7 @@ export default function DashboardPage() {
   // ── Upcoming payment due (next 7 days) ────────────────────────────────────
   const { data: dueSoon = [] } = useQuery({
     queryKey: ['due-soon'],
+    enabled: !isDriverRole,
     queryFn: async () => {
       const today   = new Date().toISOString().slice(0, 10)
       const in7days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
@@ -154,6 +187,7 @@ export default function DashboardPage() {
   // ── Passports expiring within 6 months ────────────────────────────────────
   const { data: expiringPassports = [] } = useQuery({
     queryKey: ['expiring-passports'],
+    enabled: !isDriverRole,
     queryFn: async () => {
       const today = new Date().toISOString().slice(0, 10)
       const in6mo = new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10)
@@ -171,6 +205,7 @@ export default function DashboardPage() {
   // ── Recent travellers ───────────────────────────────────────────────────────
   const { data: recentTravellers = [] } = useQuery({
     queryKey: ['recent-travellers'],
+    enabled: !isDriverRole,
     queryFn: async () => {
       const { data } = await supabase
         .from('travellers')
@@ -184,6 +219,7 @@ export default function DashboardPage() {
   // ── Upcoming trips ─────────────────────────────────────────────────────────
   const { data: upcomingTrips = [] } = useQuery({
     queryKey: ['upcoming-trips-list'],
+    enabled: !isDriverRole,
     queryFn: async () => {
       const { data } = await supabase
         .from('trips')
@@ -221,6 +257,8 @@ export default function DashboardPage() {
     permitFilter === 'all' ? true : t.tasreeh_source === permitFilter
   )
   const visaFilteredTotal = visaFilteredTravellers.length
+
+  if (isDriverRole) return <DriverDashboard user={user} />
 
   return (
     <div className="p-6 space-y-5" dir="rtl">

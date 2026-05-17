@@ -1,7 +1,8 @@
 // src/App.tsx
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
+import { isDriver, isPathAllowedForDriver } from './lib/permissions'
 import Layout from './components/layout/Layout'
 import LoginPage           from './pages/LoginPage'
 import DashboardPage       from './pages/DashboardPage'
@@ -30,6 +31,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+function DefaultHomeRedirect() {
+  const role = useAuthStore(s => s.user?.role)
+  return <Navigate to={isDriver(role) ? '/cars' : '/dashboard'} replace />
+}
+
+function DriverRouteGuard() {
+  const role = useAuthStore(s => s.user?.role)
+  const { pathname } = useLocation()
+  if (isDriver(role) && !isPathAllowedForDriver(pathname)) {
+    return <Navigate to="/cars" replace />
+  }
+  return <Outlet />
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -38,7 +53,8 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/pilgrim" element={<PilgrimPortalPage />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route element={<DriverRouteGuard />}>
+            <Route index element={<DefaultHomeRedirect />} />
             <Route path="dashboard"              element={<DashboardPage />} />
             <Route path="travellers"             element={<TravellersPage />} />
             <Route path="travellers/:id"         element={<TravellerProfilePage />} />
@@ -54,6 +70,7 @@ export default function App() {
             <Route path="reminders"              element={<RemindersPage />} />
             <Route path="adahi"                  element={<AdahiPage />} />
             <Route path="cars"                   element={<CarUsagePage />} />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>
