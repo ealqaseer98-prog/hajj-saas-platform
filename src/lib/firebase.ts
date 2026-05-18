@@ -11,7 +11,7 @@ const firebaseConfig = {
   appId: "1:780687246472:web:910ff2f2f9bfbecbca8b3d"
 }
 
-const VAPID_KEY = 'dM1ZOyL6HFb_EzzSMTn0hW11-MPlMxpAUMcNQ0DjY_4'
+const VAPID_KEY = 'BNmYmfR94n7jGzrNFfzoLbAO3SNNj_Kt6Mry4XUNXxCYvVBp3h_13UIYOX3JEByg4YFs-5fGTjZing-NMzBTtB4'
 
 const app       = initializeApp(firebaseConfig)
 const messaging = getMessaging(app)
