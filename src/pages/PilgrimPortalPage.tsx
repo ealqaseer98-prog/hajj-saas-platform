@@ -45,19 +45,44 @@ export default function PilgrimPortalPage() {
   }, [])
 
   const enableNotifications = async (cprNumber: string) => {
-    const token = await requestNotificationPermission()
+    console.log('[notifications] requestNotificationPermission called', { cprNumber })
+    let token: string | null = null
+    try {
+      token = await requestNotificationPermission()
+      console.log('[notifications] token result:', token ?? null)
+    } catch (err) {
+      console.error('[notifications] requestNotificationPermission error:', err)
+    }
+
     if (token) {
       setNotifPermission('granted')
-      // Save token linked to CPR
-      await supabase.from('fcm_tokens').upsert({
+      const { error: upsertError } = await supabase.from('fcm_tokens').upsert({
         cpr_number: cprNumber,
         token,
         device_info: navigator.userAgent,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'token' })
+
+      if (upsertError) {
+        console.error('[notifications] fcm_tokens upsert error:', upsertError)
+      } else {
+        console.log('[notifications] fcm_tokens upsert success')
+      }
+      return
+    }
+
+    if (supportsWebNotifications()) {
+      setNotifPermission(Notification.permission === 'denied' ? 'denied' : 'default')
     } else {
       setNotifPermission('denied')
     }
+
+    const iphoneHint = isAppleMobileDevice()
+      ? '\n\nعلى iPhone: افتح الموقع من Safari، اضغط زر المشاركة ⬆️ ثم «أضف إلى الشاشة الرئيسية»، وافتح التطبيق من الشاشة الرئيسية ثم حاول تفعيل الإشعارات مرة أخرى.'
+      : ''
+    alert(
+      `تعذّر تفعيل الإشعارات. تأكد من السماح بالإشعارات في إعدادات المتصفح.${iphoneHint}`
+    )
   }
 
   // ── Step 1: Look up CPR ───────────────────────────────────────────────────
