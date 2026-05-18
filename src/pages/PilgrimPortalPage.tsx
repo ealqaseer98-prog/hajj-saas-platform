@@ -7,6 +7,14 @@ import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, B
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
+function isAppleMobileDevice() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent)
+}
+
+function supportsWebNotifications() {
+  return typeof window !== 'undefined' && 'Notification' in window
+}
+
 type Step = 'login' | 'confirm' | 'portal'
 
 export default function PilgrimPortalPage() {
@@ -23,10 +31,10 @@ export default function PilgrimPortalPage() {
   const [notifPermission, setNotifPermission] = useState<'default' | 'granted' | 'denied'>('default')
   const [foregroundNotif, setForegroundNotif] = useState<any>(null)
 
-  // Check notification permission on load
+  // Check notification permission on load (not available on iPhone Safari until installed to home screen)
   useEffect(() => {
-    if ('Notification' in window) {
-      setNotifPermission(Notification.permission as any)
+    if (supportsWebNotifications()) {
+      setNotifPermission(Notification.permission as 'default' | 'granted' | 'denied')
     }
     // Listen for foreground messages
     const unsubscribe = onForegroundMessage((payload: any) => {
@@ -126,8 +134,9 @@ export default function PilgrimPortalPage() {
       setNotifications(notifData ?? [])
       setStep('portal')
 
-      // Request push notification permission
-      await enableNotifications(traveller.cpr_number)
+      if (supportsWebNotifications()) {
+        await enableNotifications(traveller.cpr_number)
+      }
     } catch {
       setError('حدث خطأ في تحميل البيانات')
     }
@@ -318,8 +327,8 @@ export default function PilgrimPortalPage() {
                 <p className="text-sm opacity-70 font-mono mt-0.5">{traveller.cpr_number}</p>
               </div>
 
-              {/* Enable notifications banner */}
-              {notifPermission === 'default' && (
+              {/* Enable notifications — browsers with Notification API */}
+              {supportsWebNotifications() && notifPermission === 'default' && (
                 <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3">
                   <Bell size={20} className="text-blue-600 shrink-0" />
                   <div className="flex-1">
@@ -333,11 +342,16 @@ export default function PilgrimPortalPage() {
                 </div>
               )}
 
-              {/* iOS add to home screen banner */}
-              {notifPermission === 'granted' && /iPhone|iPad|iPod/.test(navigator.userAgent) && (
+              {/* iPhone/iPad Safari — no Notification API until added to home screen */}
+              {isAppleMobileDevice() && !supportsWebNotifications() && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                  <p className="text-sm font-medium text-amber-800 mb-1">📱 لاستلام الإشعارات على iPhone</p>
-                  <p className="text-xs text-amber-700">اضغط على زر المشاركة <strong>⬆️</strong> في Safari ثم اختر <strong>"أضف إلى الشاشة الرئيسية"</strong></p>
+                  <p className="text-sm font-medium text-amber-800 mb-1">
+                    📱 لاستلام الإشعارات على {/iPad/i.test(navigator.userAgent) ? 'iPad' : 'iPhone'}
+                  </p>
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    متصفح Safari لا يدعم الإشعارات مباشرة. اضغط على زر المشاركة <strong>⬆️</strong> ثم اختر{' '}
+                    <strong>«أضف إلى الشاشة الرئيسية»</strong>، وافتح التطبيق من الشاشة الرئيسية ثم فعّل الإشعارات.
+                  </p>
                 </div>
               )}
 
