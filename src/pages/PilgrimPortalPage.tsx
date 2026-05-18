@@ -2,7 +2,12 @@
 // Public-facing portal for pilgrims to login with CPR and view their info
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { requestNotificationPermission, onForegroundMessage } from '../lib/firebase'
+import {
+  requestNotificationPermission,
+  onForegroundMessage,
+  getFirebaseStatus,
+  type NotificationPermissionResult,
+} from '../lib/firebase'
 import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, Bell, BellOff } from 'lucide-react'
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
@@ -30,13 +35,29 @@ export default function PilgrimPortalPage() {
   const [notifications, setNotifications] = useState<any[]>([])
   const [notifPermission, setNotifPermission] = useState<'default' | 'granted' | 'denied'>('default')
   const [foregroundNotif, setForegroundNotif] = useState<any>(null)
+  const [firebaseStatus, setFirebaseStatus] = useState(() => getFirebaseStatus())
+  const [notifStatusMsg, setNotifStatusMsg] = useState('')
 
-  // Check notification permission on load (not available on iPhone Safari until installed to home screen)
-  useEffect(() => {
+  const syncNotifPermission = () => {
     if (supportsWebNotifications()) {
       setNotifPermission(Notification.permission as 'default' | 'granted' | 'denied')
     }
-    // Listen for foreground messages
+  }
+
+  const failureAlertMessage = (result: Extract<NotificationPermissionResult, { ok: false }>) => {
+    if (result.reason === 'unsupported') {
+      return 'متصفحك لا يدعم الإشعارات'
+    }
+    if (result.reason === 'denied') {
+      return 'تم رفض الإشعارات، يرجى السماح بها من إعدادات المتصفح'
+    }
+    return result.message ?? 'حدث خطأ غير معروف أثناء تفعيل الإشعارات'
+  }
+
+  // Check notification permission on load (not available on iPhone Safari until installed to home screen)
+  useEffect(() => {
+    syncNotifPermission()
+    setFirebaseStatus(getFirebaseStatus())
     const unsubscribe = onForegroundMessage((payload: any) => {
       setForegroundNotif(payload.notification)
       setTimeout(() => setForegroundNotif(null), 5000)
@@ -46,43 +67,43 @@ export default function PilgrimPortalPage() {
 
   const enableNotifications = async (cprNumber: string) => {
     console.log('[notifications] requestNotificationPermission called', { cprNumber })
-    let token: string | null = null
-    try {
-      token = await requestNotificationPermission()
-      console.log('[notifications] token result:', token ?? null)
-    } catch (err) {
-      console.error('[notifications] requestNotificationPermission error:', err)
+
+    if (!supportsWebNotifications()) {
+      const msg = 'متصفحك لا يدعم الإشعارات'
+      setNotifStatusMsg(msg)
+      alert(msg)
+      return
     }
 
-    if (token) {
+    const result = await requestNotificationPermission()
+    console.log('[notifications] permission result:', result)
+
+    if (result.ok) {
       setNotifPermission('granted')
       const { error: upsertError } = await supabase.from('fcm_tokens').upsert({
         cpr_number: cprNumber,
-        token,
+        token: result.token,
         device_info: navigator.userAgent,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'token' })
 
       if (upsertError) {
         console.error('[notifications] fcm_tokens upsert error:', upsertError)
-      } else {
-        console.log('[notifications] fcm_tokens upsert success')
+        const msg = `تم الحصول على رمز الإشعارات لكن فشل الحفظ: ${upsertError.message}`
+        setNotifStatusMsg(msg)
+        alert(msg)
+        return
       }
+
+      console.log('[notifications] fcm_tokens upsert success')
+      setNotifStatusMsg('تم تفعيل الإشعارات وحفظ الرمز بنجاح')
       return
     }
 
-    if (supportsWebNotifications()) {
-      setNotifPermission(Notification.permission === 'denied' ? 'denied' : 'default')
-    } else {
-      setNotifPermission('denied')
-    }
-
-    const iphoneHint = isAppleMobileDevice()
-      ? '\n\nعلى iPhone: افتح الموقع من Safari، اضغط زر المشاركة ⬆️ ثم «أضف إلى الشاشة الرئيسية»، وافتح التطبيق من الشاشة الرئيسية ثم حاول تفعيل الإشعارات مرة أخرى.'
-      : ''
-    alert(
-      `تعذّر تفعيل الإشعارات. تأكد من السماح بالإشعارات في إعدادات المتصفح.${iphoneHint}`
-    )
+    syncNotifPermission()
+    const msg = failureAlertMessage(result)
+    setNotifStatusMsg(msg)
+    alert(msg)
   }
 
   // ── Step 1: Look up CPR ───────────────────────────────────────────────────
@@ -232,6 +253,14 @@ export default function PilgrimPortalPage() {
     single: 'مفردة', double: 'مزدوجة', triple: 'ثلاثية', quad: 'رباعية', quint: 'خماسية', sextuple: 'سداسية'
   }
 
+  const permissionStatusLabel = !supportsWebNotifications()
+    ? 'غير مدعوم (لا يوجد Notification API)'
+    : notifPermission === 'granted'
+    ? 'مفعّل'
+    : notifPermission === 'denied'
+    ? 'مرفوض'
+    : 'لم يُمنح بعد'
+
   return (
     <div className="min-h-screen bg-emerald-50 flex flex-col" dir="rtl">
 
@@ -350,6 +379,33 @@ export default function PilgrimPortalPage() {
                 <p className="text-sm opacity-80">أهلاً بك</p>
                 <p className="text-xl font-bold">{traveller.full_name_ar}</p>
                 <p className="text-sm opacity-70 font-mono mt-0.5">{traveller.cpr_number}</p>
+              </div>
+
+              {/* Notification permission & Firebase status */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 text-xs space-y-2">
+                <p className="font-semibold text-gray-700 text-sm">حالة الإشعارات</p>
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500 shrink-0">إذن المتصفح:</span>
+                  <span className="font-medium text-gray-800 text-left">{permissionStatusLabel}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500 shrink-0">Firebase Messaging:</span>
+                  <span className={`font-medium text-left ${firebaseStatus.initialized ? 'text-emerald-700' : 'text-red-600'}`}>
+                    {firebaseStatus.initialized ? 'مهيأ ✓' : 'غير مهيأ ✗'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-500 shrink-0">Service Worker:</span>
+                  <span className={`font-medium text-left ${firebaseStatus.hasServiceWorker ? 'text-emerald-700' : 'text-amber-600'}`}>
+                    {firebaseStatus.hasServiceWorker ? 'مدعوم ✓' : 'غير مدعوم'}
+                  </span>
+                </div>
+                {firebaseStatus.error && (
+                  <p className="text-red-600 bg-red-50 rounded-lg px-2 py-1.5">{firebaseStatus.error}</p>
+                )}
+                {notifStatusMsg && (
+                  <p className="text-gray-700 bg-gray-50 rounded-lg px-2 py-1.5 border border-gray-100">{notifStatusMsg}</p>
+                )}
               </div>
 
               {/* Enable notifications — browsers with Notification API */}
