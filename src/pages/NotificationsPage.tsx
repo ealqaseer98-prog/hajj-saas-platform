@@ -64,7 +64,7 @@ export default function NotificationsPage() {
       }
 
       // Call Supabase Edge Function to send notifications
-      const { error } = await supabase.functions.invoke('send-notification', {
+      const { error } = await supabase.functions.invoke('dynamic-action', {
         body: {
           title:   notif.title,
           message: notif.message,
