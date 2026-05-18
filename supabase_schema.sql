@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   username    TEXT UNIQUE NOT NULL,
   password    TEXT NOT NULL,        -- store bcrypt hash
   full_name   TEXT,
-  role        TEXT DEFAULT 'agent', -- 'admin' | 'agent'
+  role        TEXT DEFAULT 'agent', -- 'admin' | 'agent' | 'coordinator'
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS rooms (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   hotel_id        UUID REFERENCES hotels(id) ON DELETE CASCADE,
   room_number     TEXT NOT NULL,
-  room_type       TEXT DEFAULT 'quad', -- 'single' | 'double' | 'triple' | 'quad' | 'quint'
+  room_type       TEXT DEFAULT 'quad', -- 'single' | 'double' | 'triple' | 'quad' | 'quint' | 'sextuple'
   capacity        INT DEFAULT 4,
   floor           TEXT,
   notes           TEXT

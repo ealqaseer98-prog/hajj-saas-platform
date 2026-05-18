@@ -1,18 +1,11 @@
 // src/pages/PilgrimPortalPage.tsx
 // Public-facing portal for pilgrims to login with CPR and view their info
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { roomTypeLabel } from '../lib/roomTypes'
-import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut } from 'lucide-react'
+import { requestNotificationPermission, onForegroundMessage } from '../lib/firebase'
+import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, Bell, BellOff } from 'lucide-react'
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
-
-function formatSar(value: number) {
-  return Number(value ?? 0).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
 
 type Step = 'login' | 'confirm' | 'portal'
 
@@ -26,6 +19,38 @@ export default function PilgrimPortalPage() {
   const [rooms,      setRooms]      = useState<any[]>([])
   const [adahiInv,   setAdahiInv]   = useState<any>(null)
   const [adahiRcp,   setAdahiRcp]   = useState<any>(null)
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [notifPermission, setNotifPermission] = useState<'default' | 'granted' | 'denied'>('default')
+  const [foregroundNotif, setForegroundNotif] = useState<any>(null)
+
+  // Check notification permission on load
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotifPermission(Notification.permission as any)
+    }
+    // Listen for foreground messages
+    const unsubscribe = onForegroundMessage((payload: any) => {
+      setForegroundNotif(payload.notification)
+      setTimeout(() => setForegroundNotif(null), 5000)
+    })
+    return () => unsubscribe?.()
+  }, [])
+
+  const enableNotifications = async (cprNumber: string) => {
+    const token = await requestNotificationPermission()
+    if (token) {
+      setNotifPermission('granted')
+      // Save token linked to CPR
+      await supabase.from('fcm_tokens').upsert({
+        cpr_number: cprNumber,
+        token,
+        device_info: navigator.userAgent,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'token' })
+    } else {
+      setNotifPermission('denied')
+    }
+  }
 
   // ── Step 1: Look up CPR ───────────────────────────────────────────────────
   const lookupCpr = async () => {
@@ -88,10 +113,21 @@ export default function PilgrimPortalPage() {
         setAdahiRcp(rcpData ?? null)
       }
 
+      // Fetch active notifications
+      const { data: notifData } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+
       setDocuments(docs ?? [])
       setRooms(roomData ?? [])
       setAdahiInv(invData ?? null)
+      setNotifications(notifData ?? [])
       setStep('portal')
+
+      // Request push notification permission
+      await enableNotifications(traveller.cpr_number)
     } catch {
       setError('حدث خطأ في تحميل البيانات')
     }
@@ -137,7 +173,7 @@ export default function PilgrimPortalPage() {
         <div class="row"><span class="label">رقم البطاقة:</span><span class="value">${traveller.cpr_number}</span></div>
         <div class="row"><span class="label">الوصف:</span><span class="value">${adahiInv.description}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">نقدي</span></div>
-        <div class="amount">المبلغ المستلم: ${formatSar(Number(adahiRcp.amount))} ريال سعودي</div>
+        <div class="amount">المبلغ المستلم: ${Number(adahiRcp.amount).toLocaleString('en-US')} ريال سعودي</div>
         <div class="footer"><p>حملة العمار للحج والعمرة</p></div>
         <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 2000); }, 1500); }</script>
       </body>
@@ -154,12 +190,28 @@ export default function PilgrimPortalPage() {
     setRooms([])
     setAdahiInv(null)
     setAdahiRcp(null)
+    setNotifications([])
     setError('')
   }
 
+  const ROOM_TYPE_AR: Record<string, string> = {
+    single: 'مفردة', double: 'مزدوجة', triple: 'ثلاثية', quad: 'رباعية', quint: 'خماسية', sextuple: 'سداسية'
+  }
 
   return (
     <div className="min-h-screen bg-emerald-50 flex flex-col" dir="rtl">
+
+      {/* Foreground notification toast */}
+      {foregroundNotif && (
+        <div className="fixed top-4 right-4 left-4 z-50 bg-emerald-700 text-white rounded-2xl p-4 shadow-2xl flex items-start gap-3 animate-pulse">
+          <Bell size={20} className="shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-sm">{foregroundNotif.title}</p>
+            <p className="text-xs opacity-90 mt-0.5">{foregroundNotif.body}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -170,10 +222,18 @@ export default function PilgrimPortalPage() {
           </div>
         </div>
         {step === 'portal' && (
-          <button onClick={logout}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors">
-            <LogOut size={15} /> خروج
-          </button>
+          <div className="flex items-center gap-2">
+            {notifPermission === 'granted'
+              ? <Bell size={16} className="text-emerald-600" title="الإشعارات مفعّلة" />
+              : notifPermission === 'denied'
+              ? <BellOff size={16} className="text-gray-400" title="الإشعارات معطّلة" />
+              : null
+            }
+            <button onClick={logout}
+              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors">
+              <LogOut size={15} /> خروج
+            </button>
+          </div>
         )}
       </div>
 
@@ -184,11 +244,6 @@ export default function PilgrimPortalPage() {
           {step === 'login' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
               <div className="text-center">
-                <img
-                  src={LOGO_URL}
-                  alt="logo"
-                  style={{ height: '80px', display: 'block', margin: '0 auto' }}
-                />
                 <h1 className="text-xl font-bold text-gray-800">بوابة الحاج</h1>
                 <p className="text-sm text-gray-500 mt-1">أدخل رقم بطاقتك الشخصية للدخول</p>
               </div>
@@ -263,6 +318,48 @@ export default function PilgrimPortalPage() {
                 <p className="text-sm opacity-70 font-mono mt-0.5">{traveller.cpr_number}</p>
               </div>
 
+              {/* Enable notifications banner */}
+              {notifPermission === 'default' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3">
+                  <Bell size={20} className="text-blue-600 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-blue-800">فعّل الإشعارات</p>
+                    <p className="text-xs text-blue-600 mt-0.5">احصل على آخر التحديثات والإعلانات مباشرة على هاتفك</p>
+                  </div>
+                  <button onClick={() => enableNotifications(traveller.cpr_number)}
+                    className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium shrink-0">
+                    تفعيل
+                  </button>
+                </div>
+              )}
+
+              {/* iOS add to home screen banner */}
+              {notifPermission === 'granted' && /iPhone|iPad|iPod/.test(navigator.userAgent) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                  <p className="text-sm font-medium text-amber-800 mb-1">📱 لاستلام الإشعارات على iPhone</p>
+                  <p className="text-xs text-amber-700">اضغط على زر المشاركة <strong>⬆️</strong> في Safari ثم اختر <strong>"أضف إلى الشاشة الرئيسية"</strong></p>
+                </div>
+              )}
+
+              {/* Active notifications */}
+              {notifications.length > 0 && (
+                <div className="bg-white rounded-2xl border border-blue-200 shadow-sm p-5">
+                  <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <Bell size={18} className="text-blue-600" />
+                    إعلانات وتنبيهات
+                  </h2>
+                  <div className="space-y-3">
+                    {notifications.map((n: any) => (
+                      <div key={n.id} className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                        <p className="font-medium text-blue-800 text-sm">{n.title}</p>
+                        <p className="text-xs text-blue-600 mt-1">{n.message}</p>
+                        <p className="text-xs text-blue-400 mt-1">{new Date(n.created_at).toLocaleDateString('ar-BH')}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Permit download */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -315,7 +412,7 @@ export default function PilgrimPortalPage() {
                             <span className="text-purple-500">الطابق {ra.room.floor}</span>
                           )}
                           <span className="text-purple-500">
-                            {roomTypeLabel(ra.room?.room_type)}
+                            {ROOM_TYPE_AR[ra.room?.room_type] ?? ra.room?.room_type}
                           </span>
                         </div>
                       </div>
@@ -335,7 +432,7 @@ export default function PilgrimPortalPage() {
                     <XCircle size={32} className="mx-auto text-red-400 mb-2" />
                     <p className="text-sm text-gray-500">لم يتم تسجيل أضحية</p>
                   </div>
-                ) : adahiInv.status === 'paid' || adahiInv.status === 'overpaid' ? (
+                ) : adahiInv.status === 'paid' ? (
                   <div>
                     <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-3">
                       <CheckCircle2 size={20} className="text-green-600" />
@@ -344,7 +441,7 @@ export default function PilgrimPortalPage() {
                         <p className="text-xs text-green-600">{adahiInv.description}</p>
                       </div>
                       <span className="mr-auto font-bold text-green-700">
-                        {formatSar(Number(adahiInv.amount))} ر.س
+                        {Number(adahiInv.amount).toLocaleString('en-US')} ر.س
                       </span>
                     </div>
                     {adahiRcp && (
@@ -362,7 +459,7 @@ export default function PilgrimPortalPage() {
                       <p className="text-xs text-red-500">{adahiInv.description}</p>
                     </div>
                     <span className="mr-auto font-bold text-red-600">
-                      {formatSar(Number(adahiInv.amount))} ر.س
+                      {Number(adahiInv.amount).toLocaleString('en-US')} ر.س
                     </span>
                   </div>
                 )}

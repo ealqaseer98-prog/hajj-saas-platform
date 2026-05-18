@@ -1,8 +1,7 @@
 // src/App.tsx
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
-import { isDriver, isPathAllowedForDriver } from './lib/permissions'
 import Layout from './components/layout/Layout'
 import LoginPage           from './pages/LoginPage'
 import DashboardPage       from './pages/DashboardPage'
@@ -21,6 +20,7 @@ import RemindersPage       from './pages/RemindersPage'
 import AdahiPage           from './pages/AdahiPage'
 import PilgrimPortalPage   from './pages/PilgrimPortalPage'
 import CarUsagePage        from './pages/CarUsagePage'
+import NotificationsPage   from './pages/NotificationsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 60 * 2 } }
@@ -31,20 +31,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />
 }
 
-function DefaultHomeRedirect() {
-  const role = useAuthStore(s => s.user?.role)
-  return <Navigate to={isDriver(role) ? '/cars' : '/dashboard'} replace />
-}
-
-function DriverRoute({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore(s => s.user)
-  const { pathname } = useLocation()
-  if (user?.role === 'driver' && !isPathAllowedForDriver(pathname)) {
-    return <Navigate to="/cars" replace />
-  }
-  return <>{children}</>
-}
-
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -53,8 +39,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/pilgrim" element={<PilgrimPortalPage />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route element={<DriverRoute><Outlet /></DriverRoute>}>
-            <Route index element={<DefaultHomeRedirect />} />
+            <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"              element={<DashboardPage />} />
             <Route path="travellers"             element={<TravellersPage />} />
             <Route path="travellers/:id"         element={<TravellerProfilePage />} />
@@ -70,7 +55,7 @@ export default function App() {
             <Route path="reminders"              element={<RemindersPage />} />
             <Route path="adahi"                  element={<AdahiPage />} />
             <Route path="cars"                   element={<CarUsagePage />} />
-            </Route>
+            <Route path="notifications"          element={<NotificationsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
