@@ -493,6 +493,7 @@ export default function PilgrimPortalPage() {
                           <span className="text-purple-500">
                             {ROOM_TYPE_AR[ra.room?.room_type] ?? ra.room?.room_type}
                           </span>
+                        </div>
                         {ra.roommates?.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-purple-200">
                             <p className="text-xs font-semibold text-purple-700 mb-1.5">زملاء الغرفة:</p>
