@@ -138,6 +138,30 @@ export default function PilgrimPortalPage() {
         .select('*, room:rooms(room_number, room_type, floor, hotel:hotels(hotel_name, city))')
         .eq('traveller_id', traveller.id)
 
+      const roomIds = [...new Set((roomData ?? []).map((ra: any) => ra.room_id).filter(Boolean))]
+      const roommatesByRoomId: Record<string, { full_name_ar: string }[]> = {}
+
+      if (roomIds.length > 0) {
+        const { data: roommateRows } = await supabase
+          .from('room_assignments')
+          .select('room_id, traveller:travellers(full_name_ar)')
+          .in('room_id', roomIds)
+          .neq('traveller_id', traveller.id)
+
+        for (const row of roommateRows ?? []) {
+          const name = (row as any).traveller?.full_name_ar
+          if (!name || !(row as any).room_id) continue
+          const rid = (row as any).room_id as string
+          if (!roommatesByRoomId[rid]) roommatesByRoomId[rid] = []
+          roommatesByRoomId[rid].push({ full_name_ar: name })
+        }
+      }
+
+      const roomsWithMates = (roomData ?? []).map((ra: any) => ({
+        ...ra,
+        roommates: roommatesByRoomId[ra.room_id] ?? [],
+      }))
+
       // Fetch adahi invoice
       const { data: invData } = await supabase
         .from('invoices')
@@ -164,7 +188,7 @@ export default function PilgrimPortalPage() {
         .order('created_at', { ascending: false })
 
       setDocuments(docs ?? [])
-      setRooms(roomData ?? [])
+      setRooms(roomsWithMates)
       setAdahiInv(invData ?? null)
       setNotifications(notifData ?? [])
       setStep('portal')
@@ -288,6 +312,12 @@ export default function PilgrimPortalPage() {
           {step === 'login' && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
               <div className="text-center">
+                <img
+                  src={LOGO_URL}
+                  alt="حملة العمار للحج والعمرة"
+                  style={{ height: '80px', display: 'block', margin: '0 auto' }}
+                  className="object-contain mb-3"
+                />
                 <h1 className="text-xl font-bold text-gray-800">بوابة الحاج</h1>
                 <p className="text-sm text-gray-500 mt-1">أدخل رقم بطاقتك الشخصية للدخول</p>
               </div>
@@ -463,7 +493,16 @@ export default function PilgrimPortalPage() {
                           <span className="text-purple-500">
                             {ROOM_TYPE_AR[ra.room?.room_type] ?? ra.room?.room_type}
                           </span>
-                        </div>
+                        {ra.roommates?.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-purple-200">
+                            <p className="text-xs font-semibold text-purple-700 mb-1.5">زملاء الغرفة:</p>
+                            <ul className="space-y-1">
+                              {ra.roommates.map((mate: { full_name_ar: string }, idx: number) => (
+                                <li key={idx} className="text-sm text-purple-800">{mate.full_name_ar}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
