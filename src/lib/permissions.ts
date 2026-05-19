@@ -8,6 +8,8 @@ export const COORDINATOR_BLOCKED_PATHS = [
   '/accounts',
   '/reminders',
   '/adahi',
+  '/documents',
+  '/notifications',
 ] as const
 
 export function isDriver(role: AppUser['role'] | string | null | undefined): boolean {

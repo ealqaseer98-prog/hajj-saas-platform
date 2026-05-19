@@ -1,7 +1,8 @@
 // src/App.tsx
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
+import { isPathBlockedForCoordinator, isPathAllowedForDriver } from './lib/permissions'
 import Layout from './components/layout/Layout'
 import LoginPage           from './pages/LoginPage'
 import DashboardPage       from './pages/DashboardPage'
@@ -31,6 +32,34 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+function CoordinatorRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore(s => s.user)
+  const { pathname } = useLocation()
+  if (user?.role === 'coordinator' && isPathBlockedForCoordinator(pathname)) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
+}
+
+function DriverRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore(s => s.user)
+  const { pathname } = useLocation()
+  if (user?.role === 'driver' && !isPathAllowedForDriver(pathname)) {
+    return <Navigate to="/cars" replace />
+  }
+  return <>{children}</>
+}
+
+function RoleGuardedOutlet() {
+  return (
+    <CoordinatorRoute>
+      <DriverRoute>
+        <Layout />
+      </DriverRoute>
+    </CoordinatorRoute>
+  )
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -38,7 +67,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/pilgrim" element={<PilgrimPortalPage />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/" element={<ProtectedRoute><RoleGuardedOutlet /></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"              element={<DashboardPage />} />
             <Route path="travellers"             element={<TravellersPage />} />
