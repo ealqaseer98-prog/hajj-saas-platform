@@ -496,7 +496,7 @@ export default function PilgrimPortalPage() {
                         </div>
                         {ra.roommates?.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-purple-200">
-                            <p className="text-xs font-semibold text-purple-700 mb-1.5">زملاء الغرفة:</p>
+                            <p className="text-xs font-semibold text-purple-700 mb-1.5">الحجاج المرافقين:</p>
                             <ul className="space-y-1">
                               {ra.roommates.map((mate: { full_name_ar: string }, idx: number) => (
                                 <li key={idx} className="text-sm text-purple-800">{mate.full_name_ar}</li>
