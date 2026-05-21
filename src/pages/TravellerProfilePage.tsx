@@ -3,16 +3,27 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../store/authStore'
 import { ArrowRight, Phone, Mail, Plane, FileText, Receipt, History, FileStack, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import type { Traveller, Invoice, TravellerTrip } from '../types'
 import { roomTypeLabel } from '../lib/roomTypes'
 
 type TabKey = 'overview' | 'financial' | 'visa' | 'documents'
 
+const PROFILE_TABS: [TabKey, string, React.ReactNode][] = [
+  ['overview',   'نظرة عامة', <Plane size={13} />],
+  ['financial',  'المالية',   <FileText size={13} />],
+  ['visa',       'التصريح',  <History size={13} />],
+  ['documents',  'المستندات', <FileStack size={13} />],
+]
+
 export default function TravellerProfilePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const role = useAuthStore(s => s.user?.role)
+  const canViewFinancial = role === 'admin'
   const [tab, setTab] = useState<TabKey>('overview')
+  const visibleTabs = PROFILE_TABS.filter(([key]) => key !== 'financial' || canViewFinancial)
 
   const { data: traveller } = useQuery({
     queryKey: ['traveller', id],
@@ -32,7 +43,7 @@ export default function TravellerProfilePage() {
         .order('issue_date', { ascending: false })
       return (data ?? []) as any[]
     },
-    enabled: !!id,
+    enabled: !!id && canViewFinancial,
   })
 
   const { data: trips = [] } = useQuery({
@@ -154,28 +165,24 @@ export default function TravellerProfilePage() {
         </div>
       </div>
 
-      {/* Financial summary */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'إجمالي الفواتير',  value: totalInvoiced, color: 'text-gray-800' },
-          { label: 'المدفوع',          value: totalPaid,      color: 'text-green-600' },
-          { label: 'المتبقي',          value: balance,        color: balance > 0 ? 'text-red-600' : 'text-green-600' },
-        ].map(c => (
-          <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-            <p className="text-xs text-gray-500">{c.label}</p>
-            <p className={`text-lg font-bold mt-1 ${c.color}`}>{c.value.toFixed(3)} BHD</p>
-          </div>
-        ))}
-      </div>
+      {canViewFinancial && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'إجمالي الفواتير',  value: totalInvoiced, color: 'text-gray-800' },
+            { label: 'المدفوع',          value: totalPaid,      color: 'text-green-600' },
+            { label: 'المتبقي',          value: balance,        color: balance > 0 ? 'text-red-600' : 'text-green-600' },
+          ].map(c => (
+            <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <p className="text-xs text-gray-500">{c.label}</p>
+              <p className={`text-lg font-bold mt-1 ${c.color}`}>{c.value.toFixed(3)} BHD</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {([
-          ['overview',   'نظرة عامة', <Plane size={13} />],
-          ['financial',  'المالية',   <FileText size={13} />],
-          ['visa',       'التصريح',  <History size={13} />],
-          ['documents',  'المستندات', <FileStack size={13} />],
-        ] as [TabKey, string, React.ReactNode][]).map(([key, label, icon]) => (
+        {visibleTabs.map(([key, label, icon]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
               tab === key ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-600 hover:text-gray-800'
@@ -225,25 +232,31 @@ export default function TravellerProfilePage() {
         </div>
       )}
 
-      {/* ── Financial tab ── */}
+      {/* ── Financial tab (admin only) ── */}
       {tab === 'financial' && (
-        <Section title="الفواتير والمدفوعات" icon={<FileText size={15} />}>
-          {invoices.length === 0
-            ? <p className="text-sm text-gray-400 py-3">لا توجد فواتير</p>
-            : invoices.map((inv: any) => (
-              <div key={inv.id} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 text-sm">
-                <div>
-                  <p className="font-medium text-gray-800">{inv.invoice_number ?? 'فاتورة'}</p>
-                  <p className="text-xs text-gray-400">{inv.description ?? (inv.trip?.trip_name ?? '')} · {inv.issue_date}</p>
+        canViewFinancial ? (
+          <Section title="الفواتير والمدفوعات" icon={<FileText size={15} />}>
+            {invoices.length === 0
+              ? <p className="text-sm text-gray-400 py-3">لا توجد فواتير</p>
+              : invoices.map((inv: any) => (
+                <div key={inv.id} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0 text-sm">
+                  <div>
+                    <p className="font-medium text-gray-800">{inv.invoice_number ?? 'فاتورة'}</p>
+                    <p className="text-xs text-gray-400">{inv.description ?? (inv.trip?.trip_name ?? '')} · {inv.issue_date}</p>
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-800">{Number(inv.amount).toFixed(3)} BHD</p>
+                    <p className="text-xs text-green-600">مدفوع: {Number(inv.amount_paid).toFixed(3)}</p>
+                  </div>
                 </div>
-                <div className="text-left">
-                  <p className="font-medium text-gray-800">{Number(inv.amount).toFixed(3)} BHD</p>
-                  <p className="text-xs text-green-600">مدفوع: {Number(inv.amount_paid).toFixed(3)}</p>
-                </div>
-              </div>
-            ))
-          }
-        </Section>
+              ))
+            }
+          </Section>
+        ) : (
+          <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-8 text-center">
+            <p className="text-red-700 font-medium">غير مصرح لك بالوصول</p>
+          </div>
+        )
       )}
 
       {/* ── Visa history tab ── */}
