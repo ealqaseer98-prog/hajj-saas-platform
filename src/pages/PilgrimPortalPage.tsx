@@ -7,7 +7,7 @@ import {
   onForegroundMessage,
   type NotificationPermissionResult,
 } from '../lib/firebase'
-import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, Bell, BellOff } from 'lucide-react'
+import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, Bell, BellOff, MessageSquare, X } from 'lucide-react'
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
@@ -34,6 +34,12 @@ export default function PilgrimPortalPage() {
   const [notifications, setNotifications] = useState<any[]>([])
   const [notifPermission, setNotifPermission] = useState<'default' | 'granted' | 'denied'>('default')
   const [foregroundNotif, setForegroundNotif] = useState<any>(null)
+  const [roomRequests, setRoomRequests] = useState<any[]>([])
+  const [requestModal, setRequestModal] = useState(false)
+  const [requestForm, setRequestForm] = useState({ request_type: 'general', description: '' })
+  const [requestSubmitting, setRequestSubmitting] = useState(false)
+  const [requestSuccess, setRequestSuccess] = useState(false)
+  const [requestError, setRequestError] = useState('')
 
   const syncNotifPermission = () => {
     if (supportsWebNotifications()) {
@@ -187,10 +193,19 @@ export default function PilgrimPortalPage() {
         .eq('is_active', true)
         .order('created_at', { ascending: false })
 
+      const { data: reqData } = await supabase
+        .from('room_requests')
+        .select('*')
+        .eq('cpr_number', traveller.cpr_number)
+        .order('created_at', { ascending: false })
+
       setDocuments(docs ?? [])
       setRooms(roomsWithMates)
       setAdahiInv(invData ?? null)
       setNotifications(notifData ?? [])
+      setRoomRequests(reqData ?? [])
+      setRequestSuccess(false)
+      setRequestError('')
       setStep('portal')
 
       if (supportsWebNotifications()) {
@@ -259,7 +274,72 @@ export default function PilgrimPortalPage() {
     setAdahiInv(null)
     setAdahiRcp(null)
     setNotifications([])
+    setRoomRequests([])
+    setRequestModal(false)
+    setRequestForm({ request_type: 'general', description: '' })
+    setRequestSuccess(false)
+    setRequestError('')
     setError('')
+  }
+
+  const REQUEST_TYPE_OPTIONS = [
+    { value: 'maintenance', label: 'صيانة' },
+    { value: 'observation', label: 'ملاحظة' },
+    { value: 'general', label: 'طلب عام' },
+  ] as const
+
+  const REQUEST_TYPE_AR: Record<string, string> = {
+    maintenance: 'صيانة',
+    observation: 'ملاحظة',
+    general: 'طلب عام',
+  }
+
+  const REQUEST_STATUS_AR: Record<string, string> = {
+    new: 'جديد',
+    in_progress: 'قيد المعالجة',
+    closed: 'مغلق',
+  }
+
+  const REQUEST_STATUS_COLOR: Record<string, string> = {
+    new: 'bg-red-100 text-red-700',
+    in_progress: 'bg-amber-100 text-amber-700',
+    closed: 'bg-green-100 text-green-700',
+  }
+
+  const submitRoomRequest = async () => {
+    if (!requestForm.description.trim()) {
+      setRequestError('يرجى كتابة وصف الطلب')
+      return
+    }
+    const primaryRoom = rooms[0]
+    setRequestSubmitting(true)
+    setRequestError('')
+    try {
+      const { error } = await supabase.from('room_requests').insert({
+        cpr_number: traveller.cpr_number,
+        full_name_ar: traveller.full_name_ar,
+        room_number: primaryRoom?.room?.room_number ?? null,
+        hotel_name: primaryRoom?.room?.hotel?.hotel_name ?? null,
+        request_type: requestForm.request_type,
+        description: requestForm.description.trim(),
+        status: 'new',
+      })
+      if (error) throw error
+
+      const { data: refreshed } = await supabase
+        .from('room_requests')
+        .select('*')
+        .eq('cpr_number', traveller.cpr_number)
+        .order('created_at', { ascending: false })
+
+      setRoomRequests(refreshed ?? [])
+      setRequestModal(false)
+      setRequestForm({ request_type: 'general', description: '' })
+      setRequestSuccess(true)
+    } catch {
+      setRequestError('تعذّر إرسال الطلب، يرجى المحاولة مجددًا')
+    }
+    setRequestSubmitting(false)
   }
 
   const ROOM_TYPE_AR: Record<string, string> = {
@@ -510,6 +590,53 @@ export default function PilgrimPortalPage() {
                 )}
               </div>
 
+              {/* Service request */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h2 className="font-bold text-gray-800 flex items-center gap-2">
+                    <MessageSquare size={18} className="text-orange-600" />
+                    طلب خدمة
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => { setRequestModal(true); setRequestError('') }}
+                    className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0"
+                  >
+                    إرسال طلب
+                  </button>
+                </div>
+
+                {requestSuccess && (
+                  <div className="mb-3 flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-800">
+                    <CheckCircle2 size={18} className="text-green-600 shrink-0" />
+                    تم إرسال طلبك بنجاح وسيتم متابعته من قبل الفريق
+                  </div>
+                )}
+
+                {roomRequests.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-3">لا توجد طلبات سابقة</p>
+                ) : (
+                  <div className="space-y-2">
+                    {roomRequests.map((req: any) => (
+                      <div key={req.id} className="bg-orange-50 border border-orange-100 rounded-xl p-3">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-orange-900">
+                            {REQUEST_TYPE_AR[req.request_type] ?? req.request_type}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${REQUEST_STATUS_COLOR[req.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                            {REQUEST_STATUS_AR[req.status] ?? req.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-orange-800 mt-1">{req.description}</p>
+                        <p className="text-xs text-orange-500 mt-1">
+                          {new Date(req.created_at).toLocaleString('ar-BH')}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Adahi payment */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -563,6 +690,78 @@ export default function PilgrimPortalPage() {
       <div className="text-center py-4 text-xs text-gray-400">
         حملة العمار للحج والعمرة © 1447
       </div>
+
+      {/* Service request modal */}
+      {requestModal && step === 'portal' && (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" dir="rtl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-800">إرسال طلب خدمة</h2>
+              <button
+                type="button"
+                onClick={() => setRequestModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+                aria-label="إغلاق"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {rooms.length > 0 && (
+              <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                {rooms[0].room?.hotel?.hotel_name}
+                {rooms[0].room?.room_number ? ` — غرفة ${rooms[0].room.room_number}` : ''}
+              </p>
+            )}
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">نوع الطلب</label>
+              <select
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                value={requestForm.request_type}
+                onChange={e => setRequestForm(f => ({ ...f, request_type: e.target.value }))}
+              >
+                {REQUEST_TYPE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">وصف الطلب</label>
+              <textarea
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                rows={4}
+                placeholder="اشرح طلبك بالتفصيل..."
+                value={requestForm.description}
+                onChange={e => setRequestForm(f => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+
+            {requestError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{requestError}</p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setRequestModal(false)}
+                className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={submitRoomRequest}
+                disabled={requestSubmitting}
+                className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+              >
+                {requestSubmitting ? 'جارٍ الإرسال...' : 'إرسال'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

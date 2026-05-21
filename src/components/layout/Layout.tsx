@@ -5,7 +5,7 @@ import { useAuthStore } from '../../store/authStore'
 import {
   LayoutDashboard, Users, Plane, BookOpen, Building2,
   LogOut, Wallet, ShieldCheck, FileStack, Bell,
-  ClipboardList, Beef, Car, MoreHorizontal, X,
+  ClipboardList, Beef, Car, MoreHorizontal, X, MessageSquare,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { filterNavSectionsForRole } from '../../lib/permissions'
@@ -37,6 +37,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { to: '/trips', icon: Plane, label: 'الرحلات' },
       { to: '/trip-manifest', icon: ClipboardList, label: 'كشف الرحلة' },
       { to: '/hotels', icon: Building2, label: 'الفنادق' },
+      { to: '/room-requests', icon: MessageSquare, label: 'طلبات الخدمة' },
     ],
   },
   {

@@ -52,6 +52,10 @@ export function canManageDocuments(role: AppUser['role'] | string | null | undef
   return !isCoordinator(role)
 }
 
+export function canAccessRoomRequests(role: AppUser['role'] | string | null | undefined): boolean {
+  return role === 'admin' || role === 'coordinator'
+}
+
 export function filterNavItemsForRole<T extends { to: string }>(
   items: T[],
   role: AppUser['role'] | string | null | undefined
@@ -59,9 +63,12 @@ export function filterNavItemsForRole<T extends { to: string }>(
   if (isDriver(role)) {
     return items.filter(item => item.to === '/cars')
   }
-  if (!isCoordinator(role)) return items
+  let filtered = items.filter(
+    item => item.to !== '/room-requests' || canAccessRoomRequests(role)
+  )
+  if (!isCoordinator(role)) return filtered
   const blocked = new Set<string>(COORDINATOR_BLOCKED_PATHS)
-  return items.filter(item => !blocked.has(item.to))
+  return filtered.filter(item => !blocked.has(item.to))
 }
 
 export function filterNavSectionsForRole<S extends { label: string; items: { to: string }[] }>(
