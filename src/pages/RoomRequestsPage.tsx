@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { MessageSquare, CheckCircle2, Clock, AlertCircle, RefreshCw, X } from 'lucide-react'
+import { MessageSquare, CheckCircle2, Clock, AlertCircle, RefreshCw, X, Plus, Search } from 'lucide-react'
 
 const STATUS_LABELS: Record<string, { label: string; color: string; icon: any }> = {
   new:         { label: 'جديد',          color: 'bg-red-100 text-red-700',    icon: AlertCircle },
@@ -16,11 +16,24 @@ const TYPE_LABELS: Record<string, string> = {
   general:      'طلب عام',
 }
 
+const REQUEST_TYPE_OPTIONS = [
+  { value: 'maintenance', label: 'صيانة' },
+  { value: 'observation', label: 'ملاحظة' },
+  { value: 'general', label: 'طلب عام' },
+] as const
+
+type SelectedTraveller = { id: string; full_name_ar: string; cpr_number: string }
+
 export default function RoomRequestsPage() {
   const qc = useQueryClient()
   const [filter, setFilter]   = useState<'all' | 'new' | 'in_progress' | 'closed'>('all')
   const [selected, setSelected] = useState<any>(null)
   const [adminNotes, setAdminNotes] = useState('')
+  const [createModal, setCreateModal] = useState(false)
+  const [travellerSearch, setTravellerSearch] = useState('')
+  const [selectedTraveller, setSelectedTraveller] = useState<SelectedTraveller | null>(null)
+  const [createForm, setCreateForm] = useState({ request_type: 'general', description: '' })
+  const [createError, setCreateError] = useState('')
 
   const { data: requests = [], isLoading, refetch } = useQuery({
     queryKey: ['room-requests'],
@@ -30,6 +43,81 @@ export default function RoomRequestsPage() {
         .select('*')
         .order('created_at', { ascending: false })
       return (data ?? []) as any[]
+    },
+  })
+
+  const { data: travellers = [] } = useQuery({
+    queryKey: ['travellers-list-room-requests'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('travellers')
+        .select('id, full_name_ar, cpr_number')
+        .order('full_name_ar')
+      return (data ?? []) as SelectedTraveller[]
+    },
+    enabled: createModal,
+  })
+
+  const travellerSearchTerm = travellerSearch.trim().toLowerCase()
+  const matchingTravellers = travellerSearchTerm
+    ? travellers.filter(t =>
+        (t.full_name_ar ?? '').toLowerCase().includes(travellerSearchTerm) ||
+        (t.cpr_number ?? '').toLowerCase().includes(travellerSearchTerm)
+      )
+    : travellers
+
+  const openCreateModal = () => {
+    setCreateModal(true)
+    setTravellerSearch('')
+    setSelectedTraveller(null)
+    setCreateForm({ request_type: 'general', description: '' })
+    setCreateError('')
+  }
+
+  const closeCreateModal = () => {
+    setCreateModal(false)
+    setTravellerSearch('')
+    setSelectedTraveller(null)
+    setCreateForm({ request_type: 'general', description: '' })
+    setCreateError('')
+  }
+
+  const createRequest = useMutation({
+    mutationFn: async () => {
+      if (!selectedTraveller) throw new Error('no_traveller')
+      if (!createForm.description.trim()) throw new Error('no_description')
+
+      const { data: assignment } = await supabase
+        .from('room_assignments')
+        .select('room:rooms(room_number, hotel:hotels(hotel_name))')
+        .eq('traveller_id', selectedTraveller.id)
+        .limit(1)
+        .maybeSingle()
+
+      const room = (assignment as any)?.room
+
+      await supabase.from('room_requests').insert({
+        cpr_number: selectedTraveller.cpr_number,
+        full_name_ar: selectedTraveller.full_name_ar,
+        room_number: room?.room_number ?? null,
+        hotel_name: room?.hotel?.hotel_name ?? null,
+        request_type: createForm.request_type,
+        description: createForm.description.trim(),
+        status: 'new',
+      }).throwOnError()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['room-requests'] })
+      closeCreateModal()
+    },
+    onError: (err: Error) => {
+      if (err.message === 'no_traveller') {
+        setCreateError('يرجى اختيار الحاج')
+      } else if (err.message === 'no_description') {
+        setCreateError('يرجى كتابة وصف الطلب')
+      } else {
+        setCreateError('تعذّر إنشاء الطلب، يرجى المحاولة مجددًا')
+      }
     },
   })
 
@@ -60,10 +148,22 @@ export default function RoomRequestsPage() {
           <h1 className="text-2xl font-bold text-gray-800">طلبات الخدمة</h1>
           <p className="text-sm text-gray-500 mt-0.5">طلبات الحجاج من غرفهم</p>
         </div>
-        <button onClick={() => refetch()}
-          className="flex items-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm">
-          <RefreshCw size={14} /> تحديث
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            <Plus size={15} /> إنشاء طلب
+          </button>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="flex items-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm"
+          >
+            <RefreshCw size={14} /> تحديث
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -129,6 +229,111 @@ export default function RoomRequestsPage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Create request modal */}
+      {createModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" dir="rtl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-800">إنشاء طلب خدمة</h2>
+              <button type="button" onClick={closeCreateModal} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="relative">
+              <label className="block text-xs font-medium text-gray-600 mb-1">الحاج</label>
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  className="w-full border border-gray-200 rounded-xl pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  value={travellerSearch}
+                  onChange={e => {
+                    setTravellerSearch(e.target.value)
+                    setSelectedTraveller(null)
+                    setCreateError('')
+                  }}
+                  placeholder="ابحث بالاسم أو رقم البطاقة..."
+                />
+              </div>
+              {travellerSearch.trim() && !selectedTraveller && (
+                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
+                  {matchingTravellers.length === 0 ? (
+                    <p className="px-3 py-3 text-sm text-gray-400 text-center">لا توجد نتائج</p>
+                  ) : (
+                    matchingTravellers.map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTraveller(t)
+                          setTravellerSearch(`${t.full_name_ar} — ${t.cpr_number ?? '—'}`)
+                          setCreateError('')
+                        }}
+                        className="w-full text-right px-3 py-2.5 text-sm hover:bg-emerald-50 border-b border-gray-50 last:border-0"
+                      >
+                        <span className="font-medium text-gray-800">{t.full_name_ar}</span>
+                        <span className="text-gray-400 text-xs mr-2 font-mono">{t.cpr_number}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+              {selectedTraveller && (
+                <p className="text-xs text-emerald-700 mt-1.5 bg-emerald-50 rounded-lg px-2 py-1">
+                  تم اختيار: {selectedTraveller.full_name_ar} ({selectedTraveller.cpr_number})
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">نوع الطلب</label>
+              <select
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                value={createForm.request_type}
+                onChange={e => setCreateForm(f => ({ ...f, request_type: e.target.value }))}
+              >
+                {REQUEST_TYPE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">وصف الطلب</label>
+              <textarea
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                rows={4}
+                placeholder="اشرح الطلب بالتفصيل..."
+                value={createForm.description}
+                onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+
+            {createError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{createError}</p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={closeCreateModal}
+                className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={() => createRequest.mutate()}
+                disabled={createRequest.isPending}
+                className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+              >
+                {createRequest.isPending ? 'جارٍ الحفظ...' : 'إرسال الطلب'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
