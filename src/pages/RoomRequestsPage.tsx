@@ -24,6 +24,15 @@ const REQUEST_TYPE_OPTIONS = [
 
 type SelectedTraveller = { id: string; full_name_ar: string; cpr_number: string }
 
+const DEFAULT_HOTEL_NAME = 'نزل إبداء اصداف'
+
+const EMPTY_CREATE_FORM = {
+  request_type: 'general',
+  description: '',
+  hotel_name: '',
+  room_number: '',
+}
+
 export default function RoomRequestsPage() {
   const qc = useQueryClient()
   const [filter, setFilter]   = useState<'all' | 'new' | 'in_progress' | 'closed'>('all')
@@ -32,8 +41,9 @@ export default function RoomRequestsPage() {
   const [createModal, setCreateModal] = useState(false)
   const [travellerSearch, setTravellerSearch] = useState('')
   const [selectedTraveller, setSelectedTraveller] = useState<SelectedTraveller | null>(null)
-  const [createForm, setCreateForm] = useState({ request_type: 'general', description: '' })
+  const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM)
   const [createError, setCreateError] = useState('')
+  const [roomLoading, setRoomLoading] = useState(false)
 
   const { data: requests = [], isLoading, refetch } = useQuery({
     queryKey: ['room-requests'],
@@ -66,20 +76,64 @@ export default function RoomRequestsPage() {
       )
     : travellers
 
+  const loadTravellerRoomAssignment = async (travellerId: string) => {
+    setRoomLoading(true)
+    try {
+      const { data: assignment } = await supabase
+        .from('room_assignments')
+        .select('room:rooms(room_number, hotel:hotels(hotel_name))')
+        .eq('traveller_id', travellerId)
+        .limit(1)
+        .maybeSingle()
+
+      const room = (assignment as { room?: { room_number?: string; hotel?: { hotel_name?: string } } })?.room
+
+      if (room?.hotel?.hotel_name || room?.room_number) {
+        setCreateForm(f => ({
+          ...f,
+          hotel_name: room.hotel?.hotel_name ?? DEFAULT_HOTEL_NAME,
+          room_number: room.room_number ?? '',
+        }))
+      } else {
+        setCreateForm(f => ({
+          ...f,
+          hotel_name: DEFAULT_HOTEL_NAME,
+          room_number: '',
+        }))
+      }
+    } catch {
+      setCreateForm(f => ({
+        ...f,
+        hotel_name: DEFAULT_HOTEL_NAME,
+        room_number: '',
+      }))
+    }
+    setRoomLoading(false)
+  }
+
+  const selectTraveller = (t: SelectedTraveller) => {
+    setSelectedTraveller(t)
+    setTravellerSearch(`${t.full_name_ar} — ${t.cpr_number ?? '—'}`)
+    setCreateError('')
+    void loadTravellerRoomAssignment(t.id)
+  }
+
   const openCreateModal = () => {
     setCreateModal(true)
     setTravellerSearch('')
     setSelectedTraveller(null)
-    setCreateForm({ request_type: 'general', description: '' })
+    setCreateForm(EMPTY_CREATE_FORM)
     setCreateError('')
+    setRoomLoading(false)
   }
 
   const closeCreateModal = () => {
     setCreateModal(false)
     setTravellerSearch('')
     setSelectedTraveller(null)
-    setCreateForm({ request_type: 'general', description: '' })
+    setCreateForm(EMPTY_CREATE_FORM)
     setCreateError('')
+    setRoomLoading(false)
   }
 
   const createRequest = useMutation({
@@ -87,20 +141,11 @@ export default function RoomRequestsPage() {
       if (!selectedTraveller) throw new Error('no_traveller')
       if (!createForm.description.trim()) throw new Error('no_description')
 
-      const { data: assignment } = await supabase
-        .from('room_assignments')
-        .select('room:rooms(room_number, hotel:hotels(hotel_name))')
-        .eq('traveller_id', selectedTraveller.id)
-        .limit(1)
-        .maybeSingle()
-
-      const room = (assignment as any)?.room
-
       await supabase.from('room_requests').insert({
         cpr_number: selectedTraveller.cpr_number,
         full_name_ar: selectedTraveller.full_name_ar,
-        room_number: room?.room_number ?? null,
-        hotel_name: room?.hotel?.hotel_name ?? null,
+        room_number: createForm.room_number.trim() || null,
+        hotel_name: createForm.hotel_name.trim() || DEFAULT_HOTEL_NAME,
         request_type: createForm.request_type,
         description: createForm.description.trim(),
         status: 'new',
@@ -253,6 +298,7 @@ export default function RoomRequestsPage() {
                   onChange={e => {
                     setTravellerSearch(e.target.value)
                     setSelectedTraveller(null)
+                    setCreateForm(f => ({ ...f, hotel_name: '', room_number: '' }))
                     setCreateError('')
                   }}
                   placeholder="ابحث بالاسم أو رقم البطاقة..."
@@ -267,11 +313,7 @@ export default function RoomRequestsPage() {
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => {
-                          setSelectedTraveller(t)
-                          setTravellerSearch(`${t.full_name_ar} — ${t.cpr_number ?? '—'}`)
-                          setCreateError('')
-                        }}
+                        onClick={() => selectTraveller(t)}
                         className="w-full text-right px-3 py-2.5 text-sm hover:bg-emerald-50 border-b border-gray-50 last:border-0"
                       >
                         <span className="font-medium text-gray-800">{t.full_name_ar}</span>
@@ -284,9 +326,35 @@ export default function RoomRequestsPage() {
               {selectedTraveller && (
                 <p className="text-xs text-emerald-700 mt-1.5 bg-emerald-50 rounded-lg px-2 py-1">
                   تم اختيار: {selectedTraveller.full_name_ar} ({selectedTraveller.cpr_number})
+                  {roomLoading && <span className="text-gray-500 mr-2"> — جارٍ تحميل بيانات الغرفة...</span>}
                 </p>
               )}
             </div>
+
+            {selectedTraveller && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">الفندق</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    value={createForm.hotel_name}
+                    onChange={e => setCreateForm(f => ({ ...f, hotel_name: e.target.value }))}
+                    placeholder={DEFAULT_HOTEL_NAME}
+                    disabled={roomLoading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">رقم الغرفة</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    value={createForm.room_number}
+                    onChange={e => setCreateForm(f => ({ ...f, room_number: e.target.value }))}
+                    placeholder="—"
+                    disabled={roomLoading}
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">نوع الطلب</label>

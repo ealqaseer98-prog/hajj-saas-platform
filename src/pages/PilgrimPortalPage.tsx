@@ -326,6 +326,32 @@ export default function PilgrimPortalPage() {
       })
       if (error) throw error
 
+      const roomNumber = primaryRoom?.room?.room_number ?? '—'
+      const typeLabel = REQUEST_TYPE_AR[requestForm.request_type] ?? requestForm.request_type
+
+      try {
+        const { data: staffTokens } = await supabase
+          .from('fcm_tokens')
+          .select('token')
+          .eq('user_type', 'staff')
+
+        const tokens = (staffTokens ?? []).map((row: { token: string }) => row.token).filter(Boolean)
+        if (tokens.length > 0) {
+          const { error: pushError } = await supabase.functions.invoke('dynamic-action', {
+            body: {
+              title: 'طلب خدمة جديد 🔔',
+              message: `${traveller.full_name_ar} - غرفة ${roomNumber} - ${typeLabel}`,
+              tokens,
+            },
+          })
+          if (pushError) {
+            console.error('[room-request] staff push error:', pushError)
+          }
+        }
+      } catch (pushErr) {
+        console.error('[room-request] staff push failed:', pushErr)
+      }
+
       const { data: refreshed } = await supabase
         .from('room_requests')
         .select('*')
