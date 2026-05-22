@@ -342,6 +342,8 @@ export default function PilgrimPortalPage() {
               title: 'طلب خدمة جديد 🔔',
               message: `${traveller.full_name_ar} - غرفة ${roomNumber} - ${typeLabel}`,
               tokens,
+              send_sms: true,
+              sms_message: `طلب خدمة جديد من ${traveller.full_name_ar} - غرفة ${roomNumber || '—'} - ${typeLabel}`,
             },
           })
           if (pushError) {

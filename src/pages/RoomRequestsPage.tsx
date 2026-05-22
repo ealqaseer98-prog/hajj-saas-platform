@@ -55,6 +55,8 @@ async function notifyStaffNewRoomRequest(
         title: 'طلب خدمة جديد 🔔',
         message: `${fullNameAr} - غرفة ${roomDisplay} - ${typeLabel}`,
         tokens,
+        send_sms: true,
+        sms_message: `طلب خدمة جديد من ${fullNameAr} - غرفة ${roomNumber || '—'} - ${typeLabel}`,
       },
     })
     if (pushError) {
