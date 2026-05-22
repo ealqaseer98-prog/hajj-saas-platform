@@ -33,6 +33,38 @@ const EMPTY_CREATE_FORM = {
   room_number: '',
 }
 
+async function notifyStaffNewRoomRequest(
+  fullNameAr: string,
+  roomNumber: string | null,
+  requestType: string
+) {
+  const typeLabel = TYPE_LABELS[requestType] ?? requestType
+  const roomDisplay = roomNumber?.trim() || '—'
+
+  try {
+    const { data: staffTokens } = await supabase
+      .from('fcm_tokens')
+      .select('token')
+      .eq('user_type', 'staff')
+
+    const tokens = (staffTokens ?? []).map((row: { token: string }) => row.token).filter(Boolean)
+    if (tokens.length === 0) return
+
+    const { error: pushError } = await supabase.functions.invoke('dynamic-action', {
+      body: {
+        title: 'طلب خدمة جديد 🔔',
+        message: `${fullNameAr} - غرفة ${roomDisplay} - ${typeLabel}`,
+        tokens,
+      },
+    })
+    if (pushError) {
+      console.error('[room-request] staff push error:', pushError)
+    }
+  } catch (pushErr) {
+    console.error('[room-request] staff push failed:', pushErr)
+  }
+}
+
 export default function RoomRequestsPage() {
   const qc = useQueryClient()
   const [filter, setFilter]   = useState<'all' | 'new' | 'in_progress' | 'closed'>('all')
@@ -141,15 +173,23 @@ export default function RoomRequestsPage() {
       if (!selectedTraveller) throw new Error('no_traveller')
       if (!createForm.description.trim()) throw new Error('no_description')
 
+      const roomNumber = createForm.room_number.trim() || null
+
       await supabase.from('room_requests').insert({
         cpr_number: selectedTraveller.cpr_number,
         full_name_ar: selectedTraveller.full_name_ar,
-        room_number: createForm.room_number.trim() || null,
+        room_number: roomNumber,
         hotel_name: createForm.hotel_name.trim() || DEFAULT_HOTEL_NAME,
         request_type: createForm.request_type,
         description: createForm.description.trim(),
         status: 'new',
       }).throwOnError()
+
+      await notifyStaffNewRoomRequest(
+        selectedTraveller.full_name_ar,
+        roomNumber,
+        createForm.request_type
+      )
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['room-requests'] })
