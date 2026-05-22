@@ -190,7 +190,7 @@ export default function TripManifestPage() {
                 <tr className="border-b-2 border-gray-200">
                   <th className="text-right py-2 px-3 font-bold text-gray-700">#</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">الاسم</th>
-                  <th className="text-right py-2 px-3 font-bold text-gray-700">رقم البطاقة</th>
+                  <th className="text-right py-2 px-3 font-bold text-gray-700">رقم الجواز</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">الجنس</th>
                   <th className="text-right py-2 px-3 font-bold text-gray-700">الهاتف</th>
                 </tr>
@@ -200,7 +200,7 @@ export default function TripManifestPage() {
                   <tr key={t.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-gray-50 print:bg-gray-50' : ''}`}>
                     <td className="py-2 px-3 text-gray-500">{i + 1}</td>
                     <td className="py-2 px-3 font-medium text-gray-800">{t.full_name_ar}</td>
-                    <td className="py-2 px-3 font-mono text-gray-600">{t.cpr_number ?? '—'}</td>
+                    <td className="py-2 px-3 font-mono text-gray-600">{t.passport_number ?? '—'}</td>
                     <td className="py-2 px-3">
                       {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
                     </td>
