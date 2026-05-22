@@ -2,7 +2,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { MessageSquare, CheckCircle2, Clock, AlertCircle, RefreshCw, X, Plus, Search } from 'lucide-react'
+import { useAuthStore } from '../store/authStore'
+import { MessageSquare, CheckCircle2, Clock, AlertCircle, RefreshCw, X, Plus, Search, Trash2 } from 'lucide-react'
 
 const STATUS_LABELS: Record<string, { label: string; color: string; icon: any }> = {
   new:         { label: 'جديد',          color: 'bg-red-100 text-red-700',    icon: AlertCircle },
@@ -69,6 +70,7 @@ async function notifyStaffNewRoomRequest(
 
 export default function RoomRequestsPage() {
   const qc = useQueryClient()
+  const isAdmin = useAuthStore(s => s.user?.role) === 'admin'
   const [filter, setFilter]   = useState<'all' | 'new' | 'in_progress' | 'closed'>('all')
   const [selected, setSelected] = useState<any>(null)
   const [adminNotes, setAdminNotes] = useState('')
@@ -215,6 +217,16 @@ export default function RoomRequestsPage() {
         admin_notes: notes ?? null,
         updated_at: new Date().toISOString(),
       }).eq('id', id).throwOnError()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['room-requests'] })
+      setSelected(null)
+    },
+  })
+
+  const deleteRequest = useMutation({
+    mutationFn: async (id: string) => {
+      await supabase.from('room_requests').delete().eq('id', id).throwOnError()
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['room-requests'] })
@@ -509,20 +521,34 @@ export default function RoomRequestsPage() {
               <p className="text-xs font-medium text-gray-600">تغيير الحالة:</p>
               <div className="flex gap-2">
                 <button onClick={() => updateRequest.mutate({ id: selected.id, status: 'in_progress', notes: adminNotes })}
-                  disabled={selected.status === 'in_progress' || updateRequest.isPending}
+                  disabled={selected.status === 'in_progress' || updateRequest.isPending || deleteRequest.isPending}
                   className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg text-xs font-medium disabled:opacity-40">
                   قيد المعالجة
                 </button>
                 <button onClick={() => updateRequest.mutate({ id: selected.id, status: 'closed', notes: adminNotes })}
-                  disabled={selected.status === 'closed' || updateRequest.isPending}
+                  disabled={selected.status === 'closed' || updateRequest.isPending || deleteRequest.isPending}
                   className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-xs font-medium disabled:opacity-40">
                   إغلاق الطلب
                 </button>
                 <button onClick={() => updateRequest.mutate({ id: selected.id, status: 'new', notes: adminNotes })}
-                  disabled={selected.status === 'new' || updateRequest.isPending}
+                  disabled={selected.status === 'new' || updateRequest.isPending || deleteRequest.isPending}
                   className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg text-xs font-medium disabled:opacity-40">
                   إعادة فتح
                 </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    title="حذف الطلب"
+                    onClick={() => {
+                      if (!window.confirm('هل أنت متأكد من حذف هذا الطلب؟')) return
+                      deleteRequest.mutate(selected.id)
+                    }}
+                    disabled={deleteRequest.isPending || updateRequest.isPending}
+                    className="flex items-center justify-center px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 disabled:opacity-40 shrink-0"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
