@@ -70,10 +70,12 @@ async function notifyStaffNewRoomRequest(
 
 export default function RoomRequestsPage() {
   const qc = useQueryClient()
-  const isAdmin = useAuthStore(s => s.user?.role) === 'admin'
+  const authUser = useAuthStore(s => s.user)
+  const isAdmin = authUser?.role === 'admin'
   const [filter, setFilter]   = useState<'all' | 'new' | 'in_progress' | 'closed'>('all')
   const [selected, setSelected] = useState<any>(null)
   const [adminNotes, setAdminNotes] = useState('')
+  const [replyText, setReplyText] = useState('')
   const [createModal, setCreateModal] = useState(false)
   const [travellerSearch, setTravellerSearch] = useState('')
   const [selectedTraveller, setSelectedTraveller] = useState<SelectedTraveller | null>(null)
@@ -231,8 +233,44 @@ export default function RoomRequestsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['room-requests'] })
       setSelected(null)
+      setReplyText('')
     },
   })
+
+  const { data: requestMessages = [], isLoading: messagesLoading } = useQuery({
+    queryKey: ['room-request-messages', selected?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('room_request_messages')
+        .select('*')
+        .eq('room_request_id', selected!.id)
+        .order('created_at', { ascending: true })
+      return (data ?? []) as any[]
+    },
+    enabled: !!selected?.id,
+  })
+
+  const sendReply = useMutation({
+    mutationFn: async () => {
+      if (!selected?.id || !replyText.trim()) throw new Error('empty')
+      await supabase.from('room_request_messages').insert({
+        room_request_id: selected.id,
+        sender_type: 'staff',
+        sender_name: authUser?.full_name ?? authUser?.username ?? 'الموظف',
+        message: replyText.trim(),
+      }).throwOnError()
+    },
+    onSuccess: () => {
+      setReplyText('')
+      qc.invalidateQueries({ queryKey: ['room-request-messages', selected?.id] })
+    },
+  })
+
+  const openRequestDetail = (request: any) => {
+    setSelected(request)
+    setAdminNotes(request.admin_notes ?? '')
+    setReplyText('')
+  }
 
   const filtered = requests.filter((r: any) => filter === 'all' || r.status === filter)
 
@@ -305,7 +343,7 @@ export default function RoomRequestsPage() {
             const StatusIcon = statusInfo.icon
             return (
               <div key={r.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 cursor-pointer hover:border-emerald-200 transition-colors"
-                onClick={() => { setSelected(r); setAdminNotes(r.admin_notes ?? '') }}>
+                onClick={() => openRequestDetail(r)}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -465,7 +503,7 @@ export default function RoomRequestsPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" dir="rtl">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold">تفاصيل الطلب</h2>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => { setSelected(null); setReplyText('') }} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
@@ -549,6 +587,61 @@ export default function RoomRequestsPage() {
                     <Trash2 size={16} />
                   </button>
                 )}
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <p className="text-xs font-medium text-gray-600">الردود والتعليقات</p>
+              {messagesLoading ? (
+                <p className="text-sm text-gray-400 text-center py-2">جارٍ التحميل...</p>
+              ) : requestMessages.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-2">لا توجد ردود بعد</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {requestMessages.map((msg: any) => (
+                    <div
+                      key={msg.id}
+                      className={`flex w-full ${msg.sender_type === 'staff' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-xl px-3 py-2 text-sm border ${
+                          msg.sender_type === 'staff'
+                            ? 'bg-blue-50 border-blue-200 text-blue-900'
+                            : 'bg-green-50 border-green-200 text-green-900'
+                        }`}
+                      >
+                        <p className="text-xs font-semibold opacity-80 mb-0.5">{msg.sender_name}</p>
+                        <p className="whitespace-pre-wrap">{msg.message}</p>
+                        <p className="text-[10px] opacity-60 mt-1">
+                          {new Date(msg.created_at).toLocaleString('ar-BH')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="اكتب ردك..."
+                  value={replyText}
+                  onChange={e => setReplyText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey && replyText.trim()) {
+                      e.preventDefault()
+                      sendReply.mutate()
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => sendReply.mutate()}
+                  disabled={!replyText.trim() || sendReply.isPending}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50 shrink-0"
+                >
+                  {sendReply.isPending ? '...' : 'إرسال رد'}
+                </button>
               </div>
             </div>
           </div>

@@ -40,6 +40,10 @@ export default function PilgrimPortalPage() {
   const [requestSubmitting, setRequestSubmitting] = useState(false)
   const [requestSuccess, setRequestSuccess] = useState(false)
   const [requestError, setRequestError] = useState('')
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
+  const [messagesByRequest, setMessagesByRequest] = useState<Record<string, any[]>>({})
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const [commentSubmitting, setCommentSubmitting] = useState<string | null>(null)
 
   const syncNotifPermission = () => {
     if (supportsWebNotifications()) {
@@ -279,7 +283,49 @@ export default function PilgrimPortalPage() {
     setRequestForm({ request_type: 'general', description: '' })
     setRequestSuccess(false)
     setRequestError('')
+    setExpandedReplies({})
+    setMessagesByRequest({})
+    setCommentDrafts({})
+    setCommentSubmitting(null)
     setError('')
+  }
+
+  const loadRequestMessages = async (requestId: string) => {
+    const { data } = await supabase
+      .from('room_request_messages')
+      .select('*')
+      .eq('room_request_id', requestId)
+      .order('created_at', { ascending: true })
+    setMessagesByRequest(prev => ({ ...prev, [requestId]: data ?? [] }))
+  }
+
+  const toggleReplies = async (requestId: string) => {
+    const willOpen = !expandedReplies[requestId]
+    setExpandedReplies(prev => ({ ...prev, [requestId]: willOpen }))
+    if (willOpen && !messagesByRequest[requestId]) {
+      await loadRequestMessages(requestId)
+    }
+  }
+
+  const sendPilgrimComment = async (requestId: string) => {
+    const text = (commentDrafts[requestId] ?? '').trim()
+    if (!text || !traveller) return
+    setCommentSubmitting(requestId)
+    try {
+      const { error } = await supabase.from('room_request_messages').insert({
+        room_request_id: requestId,
+        sender_type: 'pilgrim',
+        sender_name: traveller.full_name_ar,
+        message: text,
+      })
+      if (error) throw error
+      setCommentDrafts(prev => ({ ...prev, [requestId]: '' }))
+      await loadRequestMessages(requestId)
+      setExpandedReplies(prev => ({ ...prev, [requestId]: true }))
+    } catch {
+      alert('تعذّر إرسال التعليق، يرجى المحاولة مجددًا')
+    }
+    setCommentSubmitting(null)
   }
 
   const REQUEST_TYPE_OPTIONS = [
@@ -645,22 +691,83 @@ export default function PilgrimPortalPage() {
                   <p className="text-sm text-gray-500 text-center py-3">لا توجد طلبات سابقة</p>
                 ) : (
                   <div className="space-y-2">
-                    {roomRequests.map((req: any) => (
-                      <div key={req.id} className="bg-orange-50 border border-orange-100 rounded-xl p-3">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-orange-900">
-                            {REQUEST_TYPE_AR[req.request_type] ?? req.request_type}
-                          </span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${REQUEST_STATUS_COLOR[req.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                            {REQUEST_STATUS_AR[req.status] ?? req.status}
-                          </span>
+                    {roomRequests.map((req: any) => {
+                      const isExpanded = !!expandedReplies[req.id]
+                      const messages = messagesByRequest[req.id] ?? []
+                      return (
+                        <div key={req.id} className="bg-orange-50 border border-orange-100 rounded-xl p-3">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-orange-900">
+                              {REQUEST_TYPE_AR[req.request_type] ?? req.request_type}
+                            </span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${REQUEST_STATUS_COLOR[req.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                              {REQUEST_STATUS_AR[req.status] ?? req.status}
+                            </span>
+                          </div>
+                          <p className="text-sm text-orange-800 mt-1">{req.description}</p>
+                          <p className="text-xs text-orange-500 mt-1">
+                            {new Date(req.created_at).toLocaleString('ar-BH')}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => toggleReplies(req.id)}
+                            className="mt-2 text-xs font-medium text-orange-700 hover:text-orange-900 underline"
+                          >
+                            {isExpanded ? 'إخفاء الردود' : 'عرض الردود'}
+                          </button>
+                          {isExpanded && (
+                            <div className="mt-3 pt-3 border-t border-orange-200 space-y-2">
+                              {messages.length === 0 ? (
+                                <p className="text-xs text-orange-600 text-center py-1">لا توجد ردود بعد</p>
+                              ) : (
+                                messages.map((msg: any) => (
+                                  <div
+                                    key={msg.id}
+                                    className={`flex w-full ${msg.sender_type === 'staff' ? 'justify-end' : 'justify-start'}`}
+                                  >
+                                    <div
+                                      className={`max-w-[90%] rounded-xl px-3 py-2 text-sm border ${
+                                        msg.sender_type === 'staff'
+                                          ? 'bg-blue-50 border-blue-200 text-blue-900'
+                                          : 'bg-green-50 border-green-200 text-green-900'
+                                      }`}
+                                    >
+                                      <p className="text-xs font-semibold opacity-80 mb-0.5">{msg.sender_name}</p>
+                                      <p className="whitespace-pre-wrap">{msg.message}</p>
+                                      <p className="text-[10px] opacity-60 mt-1">
+                                        {new Date(msg.created_at).toLocaleString('ar-BH')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                              <div className="flex gap-2 pt-1">
+                                <input
+                                  type="text"
+                                  className="flex-1 border border-orange-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                  placeholder="اكتب تعليقك..."
+                                  value={commentDrafts[req.id] ?? ''}
+                                  onChange={e =>
+                                    setCommentDrafts(prev => ({ ...prev, [req.id]: e.target.value }))
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => sendPilgrimComment(req.id)}
+                                  disabled={
+                                    !(commentDrafts[req.id] ?? '').trim() ||
+                                    commentSubmitting === req.id
+                                  }
+                                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50 shrink-0"
+                                >
+                                  {commentSubmitting === req.id ? '...' : 'إرسال تعليق'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-sm text-orange-800 mt-1">{req.description}</p>
-                        <p className="text-xs text-orange-500 mt-1">
-                          {new Date(req.created_at).toLocaleString('ar-BH')}
-                        </p>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
