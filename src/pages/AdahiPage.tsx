@@ -205,15 +205,6 @@ export default function AdahiPage() {
   const unpaidCount = travellers.length - paidCount
   const totalSAR = adahiInvoices.reduce((s: number, inv: any) => s + Number(inv.amount ?? 0), 0)
 
-  const filterLabel =
-    listFilter === 'paid'
-      ? 'المدفوعون'
-      : listFilter === 'wakala_only'
-        ? 'الوكالة فقط'
-        : listFilter === 'complete'
-          ? 'مكتمل'
-          : 'الكل'
-
   const printReceipt = (traveller: any) => {
     const inv = invoiceMap[traveller.id]
     if (!inv) return
@@ -271,11 +262,59 @@ export default function AdahiPage() {
     win.document.close()
   }
 
-  const printGenderList = (gender: 'male' | 'female', title: string) => {
+  const printWakalaPdf = () => {
     const date = new Date().toLocaleDateString('ar-BH')
-    const listData = filtered
-      .filter((t: any) => t.gender === gender)
+    const wakalaTravellers = travellers
+      .filter((t: any) => hasWakala(t.id))
       .sort((a: any, b: any) => (a.full_name_ar ?? '').localeCompare(b.full_name_ar ?? '', 'ar'))
+
+    const males = wakalaTravellers.filter((t: any) => t.gender === 'male')
+    const females = wakalaTravellers.filter((t: any) => t.gender === 'female')
+    const otherGender = wakalaTravellers.filter(
+      (t: any) => t.gender !== 'male' && t.gender !== 'female'
+    )
+
+    const totalWakala = wakalaTravellers.length
+    const totalPaid = wakalaTravellers.filter((t: any) => hasPaid(t.id)).length
+    const totalNotPaid = totalWakala - totalPaid
+
+    const escapeHtml = (s: string) =>
+      String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+    const buildRows = (list: any[]) =>
+      list.length === 0
+        ? '<tr><td colspan="5" style="text-align:center;color:#888">لا يوجد أسماء</td></tr>'
+        : list
+            .map((t: any, i: number) => {
+              const paid = hasPaid(t.id)
+              return `<tr>
+                <td>${i + 1}</td>
+                <td>${escapeHtml(t.full_name_ar)}</td>
+                <td>${escapeHtml(t.cpr_number ?? '—')}</td>
+                <td class="ok">${checkMark(true)}</td>
+                <td class="${paid ? 'ok' : 'no'}">${checkMark(paid)}</td>
+              </tr>`
+            })
+            .join('')
+
+    const buildSection = (title: string, list: any[]) => `
+      <section class="section">
+        <h2 class="section-title">${title}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الاسم</th>
+              <th>رقم البطاقة</th>
+              <th>الوكالة</th>
+              <th>الدفع</th>
+            </tr>
+          </thead>
+          <tbody>${buildRows(list)}</tbody>
+        </table>
+        <p class="section-count">عدد الأسماء: <strong>${list.length}</strong></p>
+      </section>
+    `
 
     const win = window.open('', '_blank')
     if (!win) return
@@ -284,60 +323,48 @@ export default function AdahiPage() {
       <html dir="rtl" lang="ar">
       <head>
         <meta charset="UTF-8">
-        <title>${title}</title>
+        <title>قائمة الوكالة — ${DEFAULT_DESC}</title>
         <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap" rel="stylesheet">
         <style>
           * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
           body { margin: 15px; direction: rtl; font-size: 13px; }
-          .header { text-align: center; margin-bottom: 15px; }
+          .header { text-align: center; margin-bottom: 20px; }
           h1 { font-size: 18px; margin: 0; }
           h3 { font-size: 13px; color: #555; margin: 4px 0; }
-          table { width: 100%; border-collapse: collapse; }
+          .section { margin-bottom: 24px; }
+          .section:not(:last-of-type) { page-break-after: always; }
+          .section-title { font-size: 16px; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 2px solid #333; }
+          .section-count { margin-top: 8px; font-size: 12px; color: #555; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
           th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: right; }
           th { background: #f0f0f0; font-weight: bold; }
           .ok { color: green; font-weight: bold; text-align: center; }
-          .no { color: #999; text-align: center; }
-          .summary { margin-top: 15px; font-size: 13px; }
-          @media print { body { margin: 5mm; } }
+          .no { color: #c00; font-weight: bold; text-align: center; }
+          .summary-box {
+            margin-top: 24px; padding: 14px; border: 2px solid #333; border-radius: 8px;
+            page-break-inside: avoid;
+          }
+          .summary-box p { margin: 6px 0; font-size: 14px; }
+          @media print {
+            body { margin: 5mm; }
+            .section:not(:last-of-type) { page-break-after: always; }
+          }
         </style>
       </head>
       <body>
         <div class="header">
           <h1>🕌 حملة العمار للحج والعمرة</h1>
-          <h3>${title}</h3>
-          <h3>${DEFAULT_DESC}</h3>
-          <h3>تاريخ الطباعة: ${date} | التصفية: ${filterLabel}</h3>
+          <h3>قائمة مستلمي الوكالة — ${DEFAULT_DESC}</h3>
+          <h3>تاريخ الطباعة: ${date}</h3>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>الاسم</th>
-              <th>رقم البطاقة</th>
-              <th>الدفع</th>
-              <th>الوكالة</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${listData.length === 0
-              ? '<tr><td colspan="5" style="text-align:center;color:#888">لا يوجد حجاج في هذه القائمة</td></tr>'
-              : listData
-                  .map((t: any, i: number) => {
-                    const paid = hasPaid(t.id)
-                    const wakala = hasWakala(t.id)
-                    return `<tr>
-                      <td>${i + 1}</td>
-                      <td>${t.full_name_ar}</td>
-                      <td>${t.cpr_number ?? '—'}</td>
-                      <td class="${paid ? 'ok' : 'no'}">${checkMark(paid)}</td>
-                      <td class="${wakala ? 'ok' : 'no'}">${checkMark(wakala)}</td>
-                    </tr>`
-                  })
-                  .join('')}
-          </tbody>
-        </table>
-        <div class="summary">
-          <p>عدد الأسماء: <strong>${listData.length}</strong></p>
+        ${buildSection('الذكور', males)}
+        ${buildSection('الإناث', females)}
+        ${otherGender.length > 0 ? buildSection('غير محدد', otherGender) : ''}
+        <div class="summary-box">
+          <p><strong>ملخص القائمة (الوكالة فقط)</strong></p>
+          <p>إجمالي من لديهم وكالة: <strong>${totalWakala}</strong></p>
+          <p>المدفوعون: <strong>${totalPaid}</strong></p>
+          <p>غير المدفوعين: <strong>${totalNotPaid}</strong></p>
         </div>
         <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 1000); }</script>
       </body>
@@ -353,22 +380,13 @@ export default function AdahiPage() {
           <h1 className="text-2xl font-bold text-gray-800">الأضاحي</h1>
           <p className="text-sm text-gray-500 mt-0.5">{DEFAULT_DESC}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => printGenderList('male', 'قائمة الذكور')}
-            className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium"
-          >
-            <Printer size={15} /> قائمة الذكور
-          </button>
-          <button
-            type="button"
-            onClick={() => printGenderList('female', 'قائمة الإناث')}
-            className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium"
-          >
-            <Printer size={15} /> قائمة الإناث
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={printWakalaPdf}
+          className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          <Printer size={15} /> طباعة قائمة الوكالة (PDF)
+        </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
