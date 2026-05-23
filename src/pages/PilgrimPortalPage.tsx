@@ -708,6 +708,12 @@ export default function PilgrimPortalPage() {
                           <p className="text-xs text-orange-500 mt-1">
                             {new Date(req.created_at).toLocaleString('ar-BH')}
                           </p>
+                          {req.status === 'closed' && req.admin_notes?.trim() && (
+                            <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-900">
+                              <p className="text-xs font-semibold text-blue-800 mb-1">رد المنسق:</p>
+                              <p className="whitespace-pre-wrap">{req.admin_notes.trim()}</p>
+                            </div>
+                          )}
                           <button
                             type="button"
                             onClick={() => toggleReplies(req.id)}
