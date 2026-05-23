@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Search, FileText, Printer } from 'lucide-react'
 
 const SAR_CASH_ACCOUNT_ID = '18acae25-9a14-40ee-acd1-9f40f87cc142'
-const DEFAULT_AMOUNT      = 720
+const DEFAULT_AMOUNT      = 750
 const DEFAULT_DESC        = 'أضحية موسم الحج 1447 هـ'
 
 type FilterType = 'all' | 'paid' | 'unpaid'
