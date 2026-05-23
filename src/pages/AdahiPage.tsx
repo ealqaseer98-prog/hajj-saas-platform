@@ -7,8 +7,10 @@ import { Search, FileText, Printer } from 'lucide-react'
 const SAR_CASH_ACCOUNT_ID = '18acae25-9a14-40ee-acd1-9f40f87cc142'
 const DEFAULT_AMOUNT      = 750
 const DEFAULT_DESC        = 'أضحية موسم الحج 1447 هـ'
+const LOGO_URL =
+  'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
-type FilterType = 'all' | 'paid' | 'unpaid'
+type ListFilter = 'all' | 'paid' | 'wakala_only' | 'complete'
 type AdahiPaymentMethod = 'cash' | 'bank_transfer'
 
 function paymentMethodLabel(m: string | undefined): string {
@@ -22,13 +24,17 @@ function formatSar(value: number) {
   })
 }
 
+function checkMark(ok: boolean) {
+  return ok ? '✓' : '✗'
+}
+
 const fieldClass =
   'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500'
 
 export default function AdahiPage() {
   const qc = useQueryClient()
-  const [search,       setSearch]       = useState('')
-  const [listFilter,   setListFilter]   = useState<FilterType>('all')
+  const [search, setSearch] = useState('')
+  const [listFilter, setListFilter] = useState<ListFilter>('all')
   const [paymentModal, setPaymentModal] = useState<{
     traveller: any
     amount: string
@@ -36,7 +42,6 @@ export default function AdahiPage() {
     paymentMethod: AdahiPaymentMethod
   } | null>(null)
 
-  // ── Fetch all travellers ──────────────────────────────────────────────────
   const { data: travellers = [], isLoading } = useQuery({
     queryKey: ['adahi-travellers'],
     queryFn: async () => {
@@ -48,7 +53,6 @@ export default function AdahiPage() {
     },
   })
 
-  // ── Fetch existing Adahi invoices ─────────────────────────────────────────
   const { data: adahiInvoices = [] } = useQuery({
     queryKey: ['adahi-invoices'],
     queryFn: async () => {
@@ -60,11 +64,27 @@ export default function AdahiPage() {
     },
   })
 
-  // Map traveller_id → invoice
-  const invoiceMap: Record<string, any> = {}
-  adahiInvoices.forEach((inv: any) => { invoiceMap[inv.traveller_id] = inv })
+  const { data: adahiStatusRows = [] } = useQuery({
+    queryKey: ['adahi-status'],
+    queryFn: async () => {
+      const { data } = await supabase.from('adahi_status').select('traveller_id, has_wakala')
+      return (data ?? []) as { traveller_id: string; has_wakala: boolean }[]
+    },
+  })
 
-  // ── Create invoice (unpaid) then receipt; trigger marks invoice paid ─────
+  const invoiceMap: Record<string, any> = {}
+  adahiInvoices.forEach((inv: any) => {
+    invoiceMap[inv.traveller_id] = inv
+  })
+
+  const wakalaMap: Record<string, boolean> = {}
+  adahiStatusRows.forEach(row => {
+    wakalaMap[row.traveller_id] = row.has_wakala
+  })
+
+  const hasPaid = (travellerId: string) => !!invoiceMap[travellerId]
+  const hasWakala = (travellerId: string) => !!wakalaMap[travellerId]
+
   const createPayment = useMutation({
     mutationFn: async (payload: {
       traveller: any
@@ -83,13 +103,13 @@ export default function AdahiPage() {
         .from('invoices')
         .insert({
           invoice_number: invNum,
-          traveller_id:   traveller.id,
-          account_id:     SAR_CASH_ACCOUNT_ID,
+          traveller_id: traveller.id,
+          account_id: SAR_CASH_ACCOUNT_ID,
           amount,
-          currency:       'SAR',
+          currency: 'SAR',
           description,
-          issue_date:     new Date().toISOString().slice(0, 10),
-          status:         'unpaid',
+          issue_date: new Date().toISOString().slice(0, 10),
+          status: 'unpaid',
         })
         .select()
         .single()
@@ -100,19 +120,17 @@ export default function AdahiPage() {
         .from('receipts').select('*', { count: 'exact', head: true })
       const rcpNum = `RCP-ADH-${String((rcpCount ?? 0) + 1).padStart(3, '0')}`
 
-      const { error: rcpErr } = await supabase
-        .from('receipts')
-        .insert({
-          receipt_number: rcpNum,
-          invoice_id:     inv.id,
-          traveller_id:   traveller.id,
-          account_id:     SAR_CASH_ACCOUNT_ID,
-          amount,
-          currency:       'SAR',
-          payment_method: paymentMethod,
-          payment_date:   new Date().toISOString().slice(0, 10),
-          notes:          description,
-        })
+      const { error: rcpErr } = await supabase.from('receipts').insert({
+        receipt_number: rcpNum,
+        invoice_id: inv.id,
+        traveller_id: traveller.id,
+        account_id: SAR_CASH_ACCOUNT_ID,
+        amount,
+        currency: 'SAR',
+        payment_method: paymentMethod,
+        payment_date: new Date().toISOString().slice(0, 10),
+        notes: description,
+      })
 
       if (rcpErr) {
         await supabase.from('invoices').delete().eq('id', inv.id)
@@ -129,7 +147,6 @@ export default function AdahiPage() {
     },
   })
 
-  // ── Delete payment ────────────────────────────────────────────────────────
   const deletePayment = useMutation({
     mutationFn: async (travellerId: string) => {
       const inv = invoiceMap[travellerId]
@@ -146,31 +163,67 @@ export default function AdahiPage() {
     },
   })
 
-  // ── Filter + search ───────────────────────────────────────────────────────
+  const toggleWakala = useMutation({
+    mutationFn: async ({ travellerId, next }: { travellerId: string; next: boolean }) => {
+      await supabase.from('adahi_status').upsert(
+        {
+          traveller_id: travellerId,
+          has_wakala: next,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'traveller_id' }
+      ).throwOnError()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['adahi-status'] })
+    },
+  })
+
   const filtered = travellers.filter((t: any) => {
-    const matchSearch = !search.trim() ||
-      t.full_name_ar?.includes(search) || t.cpr_number?.includes(search)
-    const hasPaid  = !!invoiceMap[t.id]
+    const matchSearch =
+      !search.trim() ||
+      t.full_name_ar?.includes(search) ||
+      t.cpr_number?.includes(search)
+    const paid = hasPaid(t.id)
+    const wakala = hasWakala(t.id)
     const matchFilter =
-      listFilter === 'all'    ? true :
-      listFilter === 'paid'   ? hasPaid :
-      listFilter === 'unpaid' ? !hasPaid : true
+      listFilter === 'all'
+        ? true
+        : listFilter === 'paid'
+          ? paid
+          : listFilter === 'wakala_only'
+            ? wakala
+            : listFilter === 'complete'
+              ? paid && wakala
+              : true
     return matchSearch && matchFilter
   })
 
-  const paidCount   = travellers.filter((t: any) => !!invoiceMap[t.id]).length
+  const paidCount = travellers.filter((t: any) => hasPaid(t.id)).length
+  const wakalaCount = travellers.filter((t: any) => hasWakala(t.id)).length
+  const completeCount = travellers.filter((t: any) => hasPaid(t.id) && hasWakala(t.id)).length
   const unpaidCount = travellers.length - paidCount
-  const totalSAR    = adahiInvoices.reduce((s: number, inv: any) => s + Number(inv.amount ?? 0), 0)
+  const totalSAR = adahiInvoices.reduce((s: number, inv: any) => s + Number(inv.amount ?? 0), 0)
 
-  // ── Print receipt for one traveller ──────────────────────────────────────
+  const filterLabel =
+    listFilter === 'paid'
+      ? 'المدفوعون'
+      : listFilter === 'wakala_only'
+        ? 'الوكالة فقط'
+        : listFilter === 'complete'
+          ? 'مكتمل'
+          : 'الكل'
+
   const printReceipt = (traveller: any) => {
-    const inv  = invoiceMap[traveller.id]
+    const inv = invoiceMap[traveller.id]
     if (!inv) return
     const desc = (inv.description ?? DEFAULT_DESC).replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const amt  = Number(inv.amount ?? DEFAULT_AMOUNT)
-    const pm   = paymentMethodLabel(Array.isArray(inv.receipts) ? inv.receipts[0]?.payment_method : (inv.receipts as any)?.payment_method)
+    const amt = Number(inv.amount ?? DEFAULT_AMOUNT)
+    const pm = paymentMethodLabel(
+      Array.isArray(inv.receipts) ? inv.receipts[0]?.payment_method : (inv.receipts as any)?.payment_method
+    )
     const date = new Date().toLocaleDateString('ar-BH')
-    const win  = window.open('', '_blank')
+    const win = window.open('', '_blank')
     if (!win) return
     win.document.write(`
       <!DOCTYPE html>
@@ -197,7 +250,7 @@ export default function AdahiPage() {
       </head>
       <body>
         <div class="logo-wrap">
-          <img class="logo" crossorigin="anonymous" src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png" alt="Alammar Logo" />
+          <img class="logo" crossorigin="anonymous" src="${LOGO_URL}" alt="Alammar Logo" />
         </div>
         <div class="header">
           <h1>حملة العمار للحج والعمرة</h1>
@@ -210,9 +263,7 @@ export default function AdahiPage() {
         <div class="row"><span class="label">الوصف:</span><span class="value">${desc}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">${pm}</span></div>
         <div class="amount">المبلغ المستلم: ${formatSar(amt)} ريال سعودي</div>
-        <div class="footer">
-          <p>حملة العمار للحج والعمرة</p>
-        </div>
+        <div class="footer"><p>حملة العمار للحج والعمرة</p></div>
         <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 1000); }, 2000); }</script>
       </body>
       </html>
@@ -220,10 +271,12 @@ export default function AdahiPage() {
     win.document.close()
   }
 
-  // ── Print full list ───────────────────────────────────────────────────────
-  const printList = () => {
-    const date     = new Date().toLocaleDateString('ar-BH')
+  const printGenderList = (gender: 'male' | 'female', title: string) => {
+    const date = new Date().toLocaleDateString('ar-BH')
     const listData = filtered
+      .filter((t: any) => t.gender === gender)
+      .sort((a: any, b: any) => (a.full_name_ar ?? '').localeCompare(b.full_name_ar ?? '', 'ar'))
+
     const win = window.open('', '_blank')
     if (!win) return
     win.document.write(`
@@ -231,7 +284,7 @@ export default function AdahiPage() {
       <html dir="rtl" lang="ar">
       <head>
         <meta charset="UTF-8">
-        <title>قائمة الأضاحي</title>
+        <title>${title}</title>
         <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap" rel="stylesheet">
         <style>
           * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
@@ -240,10 +293,10 @@ export default function AdahiPage() {
           h1 { font-size: 18px; margin: 0; }
           h3 { font-size: 13px; color: #555; margin: 4px 0; }
           table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: right; }
+          th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: right; }
           th { background: #f0f0f0; font-weight: bold; }
-          .paid { color: green; font-weight: bold; }
-          .unpaid { color: red; }
+          .ok { color: green; font-weight: bold; text-align: center; }
+          .no { color: #999; text-align: center; }
           .summary { margin-top: 15px; font-size: 13px; }
           @media print { body { margin: 5mm; } }
         </style>
@@ -251,44 +304,40 @@ export default function AdahiPage() {
       <body>
         <div class="header">
           <h1>🕌 حملة العمار للحج والعمرة</h1>
-          <h3>قائمة الأضاحي — ${DEFAULT_DESC}</h3>
-          <h3>تاريخ الطباعة: ${date} | ${
-            listFilter === 'paid' ? 'المدفوعون فقط' :
-            listFilter === 'unpaid' ? 'غير المدفوعون فقط' : 'الكل'
-          }</h3>
+          <h3>${title}</h3>
+          <h3>${DEFAULT_DESC}</h3>
+          <h3>تاريخ الطباعة: ${date} | التصفية: ${filterLabel}</h3>
         </div>
         <table>
           <thead>
             <tr>
               <th>#</th>
-              <th>اسم الحاج</th>
+              <th>الاسم</th>
               <th>رقم البطاقة</th>
-              <th>رقم الهاتف</th>
-              <th>المبلغ</th>
-              <th>الحالة</th>
-              <th>رقم الإيصال</th>
+              <th>الدفع</th>
+              <th>الوكالة</th>
             </tr>
           </thead>
           <tbody>
-            ${listData.map((t: any, i: number) => {
-              const inv    = invoiceMap[t.id]
-              const isPaid = !!inv
-              const paidAmt = inv ? Number(inv.amount ?? 0) : 0
-              return `<tr>
-                <td>${i + 1}</td>
-                <td>${t.full_name_ar}</td>
-                <td>${t.cpr_number}</td>
-                <td>${t.phone ?? '—'}</td>
-                <td>${isPaid ? formatSar(paidAmt) + ' ر.س' : '—'}</td>
-                <td class="${isPaid ? 'paid' : 'unpaid'}">${isPaid ? '✓ مدفوع' : '✗ لم يُدفع'}</td>
-                <td>${inv?.invoice_number ?? '—'}</td>
-              </tr>`
-            }).join('')}
+            ${listData.length === 0
+              ? '<tr><td colspan="5" style="text-align:center;color:#888">لا يوجد حجاج في هذه القائمة</td></tr>'
+              : listData
+                  .map((t: any, i: number) => {
+                    const paid = hasPaid(t.id)
+                    const wakala = hasWakala(t.id)
+                    return `<tr>
+                      <td>${i + 1}</td>
+                      <td>${t.full_name_ar}</td>
+                      <td>${t.cpr_number ?? '—'}</td>
+                      <td class="${paid ? 'ok' : 'no'}">${checkMark(paid)}</td>
+                      <td class="${wakala ? 'ok' : 'no'}">${checkMark(wakala)}</td>
+                    </tr>`
+                  })
+                  .join('')}
           </tbody>
         </table>
         <div class="summary">
-          <p>إجمالي المدفوعين: <strong>${paidCount}</strong> حاج</p>
-          <p>إجمالي المبالغ المحصّلة: <strong>${formatSar(totalSAR)} ريال سعودي</strong></p>
+          <p>عدد الأسماء: <strong>${listData.length}</strong></p>
         </div>
         <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 1000); }</script>
       </body>
@@ -299,24 +348,35 @@ export default function AdahiPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-5 pb-20 md:pb-6" dir="rtl">
-      {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">الأضاحي</h1>
           <p className="text-sm text-gray-500 mt-0.5">{DEFAULT_DESC}</p>
         </div>
-        <button onClick={printList}
-          className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium">
-          <Printer size={15} /> طباعة القائمة
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => printGenderList('male', 'قائمة الذكور')}
+            className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium"
+          >
+            <Printer size={15} /> قائمة الذكور
+          </button>
+          <button
+            type="button"
+            onClick={() => printGenderList('female', 'قائمة الإناث')}
+            className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium"
+          >
+            <Printer size={15} /> قائمة الإناث
+          </button>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'إجمالي الحجاج', value: travellers.length, color: 'text-gray-800' },
           { label: 'المدفوعون', value: paidCount, color: 'text-green-600' },
-          { label: 'غير المدفوعين', value: unpaidCount, color: 'text-red-600' },
+          { label: 'الوكالة', value: wakalaCount, color: 'text-blue-600' },
+          { label: 'مكتمل', value: completeCount, color: 'text-emerald-700' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 text-center">
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -325,106 +385,167 @@ export default function AdahiPage() {
         ))}
       </div>
 
-      {/* Total collected */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between">
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <span className="text-sm text-emerald-700 font-medium">إجمالي المبالغ المحصّلة</span>
         <span className="text-lg font-bold text-emerald-700">{formatSar(totalSAR)} ر.س</span>
+        <span className="text-xs text-emerald-600">غير المدفوعين: {unpaidCount}</span>
       </div>
 
-      {/* Search + Filter */}
       <div className="flex flex-col md:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <input className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          <input
+            className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             placeholder="ابحث بالاسم أو رقم البطاقة..."
-            value={search} onChange={e => setSearch(e.target.value)} />
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {([['all','الكل'],['paid','المدفوعون'],['unpaid','غير المدفوعين']] as const).map(([v, l]) => (
-            <button key={v} onClick={() => setListFilter(v)}
+        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-lg p-1">
+          {(
+            [
+              ['all', 'الكل'],
+              ['paid', 'المدفوعون'],
+              ['wakala_only', 'الوكالة فقط'],
+              ['complete', 'مكتمل'],
+            ] as const
+          ).map(([v, l]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setListFilter(v)}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 listFilter === v ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
-              }`}>{l}</button>
+              }`}
+            >
+              {l}
+            </button>
           ))}
         </div>
       </div>
 
-      {/* List */}
       <div className="space-y-2">
         {isLoading ? (
           <div className="p-10 text-center text-gray-400">جارٍ التحميل...</div>
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center text-gray-400">لا يوجد نتائج</div>
-        ) : filtered.map((t: any) => {
-          const inv    = invoiceMap[t.id]
-          const isPaid = !!inv
+        ) : (
+          filtered.map((t: any) => {
+            const inv = invoiceMap[t.id]
+            const isPaid = hasPaid(t.id)
+            const isWakala = hasWakala(t.id)
 
-          return (
-            <div key={t.id} className={`bg-white rounded-xl border shadow-sm p-4 ${isPaid ? 'border-green-200' : 'border-gray-100'}`}>
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                {/* Name + info */}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-800">{t.full_name_ar}</span>
-                    {isPaid && (
-                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                        ✓ مدفوع
+            return (
+              <div
+                key={t.id}
+                className={`bg-white rounded-xl border shadow-sm p-4 ${
+                  isPaid && isWakala
+                    ? 'border-emerald-300'
+                    : isPaid
+                      ? 'border-green-200'
+                      : isWakala
+                        ? 'border-blue-200'
+                        : 'border-gray-100'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-gray-800">{t.full_name_ar}</span>
+                      <span className="text-xs text-gray-400">
+                        {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
                       </span>
+                    </div>
+                    <p className="text-xs text-gray-400 font-mono mt-0.5">{t.cpr_number}</p>
+                    {isPaid && (
+                      <p className="text-xs text-gray-400 mt-0.5">رقم الإيصال: {inv.invoice_number}</p>
+                    )}
+
+                    <div className="flex items-center gap-4 mt-3">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-default">
+                        <input
+                          type="checkbox"
+                          checked={isPaid}
+                          readOnly
+                          disabled
+                          className="rounded border-gray-300 text-green-600 w-4 h-4"
+                        />
+                        <span className={isPaid ? 'text-green-700 font-medium' : 'text-gray-500'}>دفع</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isWakala}
+                          disabled={toggleWakala.isPending}
+                          onChange={() =>
+                            toggleWakala.mutate({ travellerId: t.id, next: !isWakala })
+                          }
+                          className="rounded border-gray-300 text-blue-600 w-4 h-4 cursor-pointer"
+                        />
+                        <span className={isWakala ? 'text-blue-700 font-medium' : 'text-gray-500'}>وكالة</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!isPaid ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          createPayment.reset()
+                          setPaymentModal({
+                            traveller: t,
+                            amount: String(DEFAULT_AMOUNT),
+                            description: DEFAULT_DESC,
+                            paymentMethod: 'cash',
+                          })
+                        }}
+                        disabled={createPayment.isPending}
+                        className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors"
+                      >
+                        <FileText size={13} />
+                        تسجيل الدفع
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => printReceipt(t)}
+                          className="flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
+                        >
+                          <Printer size={13} /> إيصال PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => window.confirm('حذف هذا الدفع؟') && deletePayment.mutate(t.id)}
+                          className="text-xs text-red-400 hover:text-red-600 px-2 py-2 transition-colors"
+                        >
+                          حذف
+                        </button>
+                      </>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 font-mono mt-0.5">{t.cpr_number}</p>
-                  {isPaid && (
-                    <p className="text-xs text-gray-400 mt-0.5">رقم الإيصال: {inv.invoice_number}</p>
-                  )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {!isPaid ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        createPayment.reset()
-                        setPaymentModal({
-                          traveller: t,
-                          amount: String(DEFAULT_AMOUNT),
-                          description: DEFAULT_DESC,
-                          paymentMethod: 'cash',
-                        })
-                      }}
-                      disabled={createPayment.isPending}
-                      className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors">
-                      <FileText size={13} />
-                      تسجيل الدفع
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => printReceipt(t)}
-                        className="flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-                        <Printer size={13} /> إيصال PDF
-                      </button>
-                      <button
-                        onClick={() => window.confirm('حذف هذا الدفع؟') && deletePayment.mutate(t.id)}
-                        className="text-xs text-red-400 hover:text-red-600 px-2 py-2 transition-colors">
-                        حذف
-                      </button>
-                    </>
-                  )}
-                </div>
+                {isPaid && (
+                  <div className="mt-2 text-xs text-gray-500 flex items-center gap-4 flex-wrap">
+                    <span>
+                      المبلغ:{' '}
+                      <strong className="text-gray-700">{formatSar(Number(inv.amount ?? 0))} ر.س</strong>
+                    </span>
+                    <span>
+                      {paymentMethodLabel(
+                        Array.isArray(inv.receipts)
+                          ? inv.receipts[0]?.payment_method
+                          : (inv.receipts as any)?.payment_method
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
-
-              {/* Amount display */}
-              {isPaid && (
-                <div className="mt-2 text-xs text-gray-500 flex items-center gap-4 flex-wrap">
-                  <span>المبلغ: <strong className="text-gray-700">{formatSar(Number(inv.amount ?? 0))} ر.س</strong></span>
-                  <span>{paymentMethodLabel(Array.isArray(inv.receipts) ? inv.receipts[0]?.payment_method : (inv.receipts as any)?.payment_method)}</span>
-                  <span>{inv.invoice_number}</span>
-                </div>
-              )}
-            </div>
-          )
-        })}
+            )
+          })
+        )}
       </div>
 
       {paymentModal && (
@@ -435,7 +556,10 @@ export default function AdahiPage() {
           aria-labelledby="adahi-payment-modal-title"
         >
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100 max-h-[90vh] overflow-y-auto">
-            <h2 id="adahi-payment-modal-title" className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-2">
+            <h2
+              id="adahi-payment-modal-title"
+              className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-2"
+            >
               تسجيل دفع — {paymentModal.traveller.full_name_ar}
             </h2>
             <div>
