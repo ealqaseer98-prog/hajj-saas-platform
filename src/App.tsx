@@ -2,7 +2,12 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
-import { isPathBlockedForCoordinator, isPathAllowedForDriver, canAccessRoomRequests } from './lib/permissions'
+import {
+  isPathBlockedForCoordinator,
+  isPathAllowedForDriver,
+  canAccessRoomRequests,
+  canAccessStaffPage,
+} from './lib/permissions'
 import Layout from './components/layout/Layout'
 import LoginPage           from './pages/LoginPage'
 import DashboardPage       from './pages/DashboardPage'
@@ -23,6 +28,7 @@ import PilgrimPortalPage   from './pages/PilgrimPortalPage'
 import CarUsagePage        from './pages/CarUsagePage'
 import NotificationsPage   from './pages/NotificationsPage'
 import RoomRequestsPage    from './pages/RoomRequestsPage'
+import StaffPage           from './pages/StaffPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 60 * 2 } }
@@ -63,12 +69,26 @@ function RoomRequestsRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function StaffRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore(s => s.user)
+  const { pathname } = useLocation()
+  if (
+    (pathname === '/staff' || pathname.startsWith('/staff/')) &&
+    !canAccessStaffPage(user?.role)
+  ) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
+}
+
 function RoleGuardedOutlet() {
   return (
     <CoordinatorRoute>
       <DriverRoute>
         <RoomRequestsRoute>
-          <Layout />
+          <StaffRoute>
+            <Layout />
+          </StaffRoute>
         </RoomRequestsRoute>
       </DriverRoute>
     </CoordinatorRoute>
@@ -101,6 +121,7 @@ export default function App() {
             <Route path="cars"                   element={<CarUsagePage />} />
             <Route path="notifications"          element={<NotificationsPage />} />
             <Route path="room-requests"          element={<RoomRequestsPage />} />
+            <Route path="staff"                   element={<StaffPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

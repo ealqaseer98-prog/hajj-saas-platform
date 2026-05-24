@@ -56,6 +56,10 @@ export function canAccessRoomRequests(role: AppUser['role'] | string | null | un
   return role === 'admin' || role === 'coordinator'
 }
 
+export function canAccessStaffPage(role: AppUser['role'] | string | null | undefined): boolean {
+  return role === 'admin'
+}
+
 export function filterNavItemsForRole<T extends { to: string }>(
   items: T[],
   role: AppUser['role'] | string | null | undefined
@@ -63,9 +67,11 @@ export function filterNavItemsForRole<T extends { to: string }>(
   if (isDriver(role)) {
     return items.filter(item => item.to === '/cars')
   }
-  let filtered = items.filter(
-    item => item.to !== '/room-requests' || canAccessRoomRequests(role)
-  )
+  let filtered = items.filter(item => {
+    if (item.to === '/room-requests' && !canAccessRoomRequests(role)) return false
+    if (item.to === '/staff' && !canAccessStaffPage(role)) return false
+    return true
+  })
   if (!isCoordinator(role)) return filtered
   const blocked = new Set<string>(COORDINATOR_BLOCKED_PATHS)
   return filtered.filter(item => !blocked.has(item.to))
