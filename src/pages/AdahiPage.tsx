@@ -7,6 +7,37 @@ import { Search, FileText, Printer } from 'lucide-react'
 const SAR_CASH_ACCOUNT_ID = '18acae25-9a14-40ee-acd1-9f40f87cc142'
 const DEFAULT_AMOUNT      = 750
 const DEFAULT_DESC        = 'أضحية موسم الحج 1447 هـ'
+const STAFF_EXPENSE_DESC  = 'أضحية كادر - موسم الحج 1447 هـ'
+
+type AdahiPersonType = 'traveller' | 'staff'
+
+type AdahiListItem = {
+  type: AdahiPersonType
+  id: string
+  full_name_ar: string
+  cpr_number: string | null
+  phone: string | null
+  gender: string | null
+  role_title: string | null
+  is_active?: boolean
+}
+
+function parseIdFromNotes(notes: string | null | undefined, prefix: 'staff_id' | 'traveller_id'): string | null {
+  const match = notes?.match(new RegExp(`${prefix}:([0-9a-f-]+)`, 'i'))
+  return match?.[1] ?? null
+}
+
+async function nextAdahiExpenseNumber(): Promise<string> {
+  const { data } = await supabase
+    .from('expenses')
+    .select('expense_number')
+    .ilike('expense_number', 'EXP-1447-%')
+    .order('expense_number', { ascending: false })
+    .limit(1)
+  const last = data?.[0]?.expense_number
+  const lastNum = last ? parseInt(last.split('-').pop() ?? '0', 10) : 0
+  return `EXP-1447-${String(lastNum + 1).padStart(3, '0')}`
+}
 const LOGO_URL =
   'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
@@ -36,20 +67,51 @@ export default function AdahiPage() {
   const [search, setSearch] = useState('')
   const [listFilter, setListFilter] = useState<ListFilter>('all')
   const [paymentModal, setPaymentModal] = useState<{
-    traveller: any
+    person: AdahiListItem
     amount: string
     description: string
     paymentMethod: AdahiPaymentMethod
+    recordAsExpense: boolean
   } | null>(null)
 
-  const { data: travellers = [], isLoading } = useQuery({
-    queryKey: ['adahi-travellers'],
+  const { data: people = [], isLoading } = useQuery({
+    queryKey: ['adahi-people'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('travellers')
-        .select('id, full_name_ar, cpr_number, phone, gender')
-        .order('full_name_ar')
-      return (data ?? []) as any[]
+      const [{ data: travData }, { data: staffData }] = await Promise.all([
+        supabase
+          .from('travellers')
+          .select('id, full_name_ar, cpr_number, phone, gender')
+          .order('full_name_ar'),
+        supabase
+          .from('staff')
+          .select('id, full_name_ar, role_title, phone, gender, is_active')
+          .order('full_name_ar'),
+      ])
+
+      const travellers: AdahiListItem[] = (travData ?? []).map((t: any) => ({
+        type: 'traveller',
+        id: t.id,
+        full_name_ar: t.full_name_ar,
+        cpr_number: t.cpr_number ?? null,
+        phone: t.phone ?? null,
+        gender: t.gender ?? null,
+        role_title: null,
+      }))
+
+      const staffMembers: AdahiListItem[] = (staffData ?? []).map((s: any) => ({
+        type: 'staff',
+        id: s.id,
+        full_name_ar: s.full_name_ar,
+        cpr_number: null,
+        phone: s.phone ?? null,
+        gender: s.gender ?? null,
+        role_title: s.role_title ?? null,
+        is_active: s.is_active,
+      }))
+
+      return [...travellers, ...staffMembers].sort((a, b) =>
+        (a.full_name_ar ?? '').localeCompare(b.full_name_ar ?? '', 'ar')
+      )
     },
   })
 
@@ -72,9 +134,30 @@ export default function AdahiPage() {
     },
   })
 
+  const { data: adahiExpenses = [] } = useQuery({
+    queryKey: ['adahi-staff-expenses'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expenses')
+        .select('id, amount, expense_number, description, notes, expense_date')
+        .eq('account_id', SAR_CASH_ACCOUNT_ID)
+        .or(`description.ilike.%أضحية كادر%,description.ilike.%أضحية%`)
+      return (data ?? []) as any[]
+    },
+  })
+
   const invoiceMap: Record<string, any> = {}
   adahiInvoices.forEach((inv: any) => {
-    invoiceMap[inv.traveller_id] = inv
+    if (inv.traveller_id) invoiceMap[inv.traveller_id] = inv
+  })
+
+  const staffExpenseMap: Record<string, any> = {}
+  const travellerExpenseMap: Record<string, any> = {}
+  adahiExpenses.forEach((exp: any) => {
+    const staffId = parseIdFromNotes(exp.notes, 'staff_id')
+    if (staffId) staffExpenseMap[staffId] = exp
+    const travellerId = parseIdFromNotes(exp.notes, 'traveller_id')
+    if (travellerId) travellerExpenseMap[travellerId] = exp
   })
 
   const wakalaMap: Record<string, boolean> = {}
@@ -82,18 +165,48 @@ export default function AdahiPage() {
     wakalaMap[row.traveller_id] = row.has_wakala
   })
 
-  const hasPaid = (travellerId: string) => !!invoiceMap[travellerId]
-  const hasWakala = (travellerId: string) => !!wakalaMap[travellerId]
+  const hasPaid = (person: AdahiListItem) =>
+    person.type === 'traveller'
+      ? !!invoiceMap[person.id] || !!travellerExpenseMap[person.id]
+      : !!staffExpenseMap[person.id]
+
+  const hasWakala = (person: AdahiListItem) =>
+    person.type === 'traveller' ? !!wakalaMap[person.id] : false
+
+  const getPaymentRecord = (person: AdahiListItem) =>
+    person.type === 'traveller'
+      ? invoiceMap[person.id] ?? travellerExpenseMap[person.id]
+      : staffExpenseMap[person.id]
 
   const createPayment = useMutation({
     mutationFn: async (payload: {
-      traveller: any
+      person: AdahiListItem
       amount: number
       description: string
       paymentMethod: AdahiPaymentMethod
+      recordAsExpense: boolean
     }) => {
-      const { traveller, amount, description, paymentMethod } = payload
+      const { person, amount, description, paymentMethod, recordAsExpense } = payload
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('مبلغ غير صالح')
+
+      if (person.type === 'staff' || recordAsExpense) {
+        const expNum = await nextAdahiExpenseNumber()
+        const { error } = await supabase.from('expenses').insert({
+          expense_number: expNum,
+          account_id: SAR_CASH_ACCOUNT_ID,
+          amount,
+          currency: 'SAR',
+          description: person.type === 'staff' ? STAFF_EXPENSE_DESC : description,
+          expense_date: new Date().toISOString().slice(0, 10),
+          notes:
+            person.type === 'staff'
+              ? `staff_id:${person.id}`
+              : `traveller_id:${person.id}`,
+          category: 'other',
+        })
+        if (error) throw error
+        return
+      }
 
       const { data: lastInvData } = await supabase
         .from('invoices')
@@ -111,7 +224,7 @@ export default function AdahiPage() {
         .from('invoices')
         .insert({
           invoice_number: invNum,
-          traveller_id: traveller.id,
+          traveller_id: person.id,
           account_id: SAR_CASH_ACCOUNT_ID,
           amount,
           currency: 'SAR',
@@ -139,7 +252,7 @@ export default function AdahiPage() {
       const { error: rcpErr } = await supabase.from('receipts').insert({
         receipt_number: rcpNum,
         invoice_id: inv.id,
-        traveller_id: traveller.id,
+        traveller_id: person.id,
         account_id: SAR_CASH_ACCOUNT_ID,
         amount,
         currency: 'SAR',
@@ -155,26 +268,41 @@ export default function AdahiPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['adahi-invoices'] })
+      qc.invalidateQueries({ queryKey: ['adahi-staff-expenses'] })
       qc.invalidateQueries({ queryKey: ['accounts-list'] })
       qc.invalidateQueries({ queryKey: ['invoices'] })
       qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['invoices-list'] })
       setPaymentModal(null)
     },
   })
 
   const deletePayment = useMutation({
-    mutationFn: async (travellerId: string) => {
-      const inv = invoiceMap[travellerId]
+    mutationFn: async (person: AdahiListItem) => {
+      if (person.type === 'staff') {
+        const exp = staffExpenseMap[person.id]
+        if (!exp) return
+        await supabase.from('expenses').delete().eq('id', exp.id).throwOnError()
+        return
+      }
+      const travExp = travellerExpenseMap[person.id]
+      if (travExp) {
+        await supabase.from('expenses').delete().eq('id', travExp.id).throwOnError()
+        return
+      }
+      const inv = invoiceMap[person.id]
       if (!inv) return
       await supabase.from('receipts').delete().eq('invoice_id', inv.id)
       await supabase.from('invoices').delete().eq('id', inv.id)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['adahi-invoices'] })
+      qc.invalidateQueries({ queryKey: ['adahi-staff-expenses'] })
       qc.invalidateQueries({ queryKey: ['accounts-list'] })
       qc.invalidateQueries({ queryKey: ['invoices'] })
       qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['invoices-list'] })
     },
   })
@@ -195,13 +323,15 @@ export default function AdahiPage() {
     },
   })
 
-  const filtered = travellers.filter((t: any) => {
+  const filtered = people.filter((p: AdahiListItem) => {
     const matchSearch =
       !search.trim() ||
-      t.full_name_ar?.includes(search) ||
-      t.cpr_number?.includes(search)
-    const paid = hasPaid(t.id)
-    const wakala = hasWakala(t.id)
+      p.full_name_ar?.includes(search) ||
+      (p.cpr_number?.includes(search) ?? false) ||
+      (p.role_title?.includes(search) ?? false) ||
+      p.id.includes(search)
+    const paid = hasPaid(p)
+    const wakala = hasWakala(p)
     const matchFilter =
       listFilter === 'all'
         ? true
@@ -215,14 +345,16 @@ export default function AdahiPage() {
     return matchSearch && matchFilter
   })
 
-  const paidCount = travellers.filter((t: any) => hasPaid(t.id)).length
-  const wakalaCount = travellers.filter((t: any) => hasWakala(t.id)).length
-  const completeCount = travellers.filter((t: any) => hasPaid(t.id) && hasWakala(t.id)).length
-  const unpaidCount = travellers.length - paidCount
-  const totalSAR = adahiInvoices.reduce((s: number, inv: any) => s + Number(inv.amount ?? 0), 0)
+  const paidCount = people.filter((p: AdahiListItem) => hasPaid(p)).length
+  const wakalaCount = people.filter((p: AdahiListItem) => hasWakala(p)).length
+  const completeCount = people.filter((p: AdahiListItem) => hasPaid(p) && hasWakala(p)).length
+  const unpaidCount = people.length - paidCount
+  const totalSAR =
+    adahiInvoices.reduce((s: number, inv: any) => s + Number(inv.amount ?? 0), 0) +
+    adahiExpenses.reduce((s: number, exp: any) => s + Number(exp.amount ?? 0), 0)
 
-  const printReceipt = (traveller: any) => {
-    const inv = invoiceMap[traveller.id]
+  const printReceipt = (person: AdahiListItem) => {
+    const inv = person.type === 'traveller' ? invoiceMap[person.id] : null
     if (!inv) return
     const desc = (inv.description ?? DEFAULT_DESC).replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const amt = Number(inv.amount ?? DEFAULT_AMOUNT)
@@ -265,8 +397,8 @@ export default function AdahiPage() {
         </div>
         <div class="row"><span class="label">رقم الإيصال:</span><span class="value">${inv.invoice_number}</span></div>
         <div class="row"><span class="label">التاريخ:</span><span class="value">${date}</span></div>
-        <div class="row"><span class="label">اسم الحاج:</span><span class="value">${traveller.full_name_ar}</span></div>
-        <div class="row"><span class="label">رقم البطاقة:</span><span class="value">${traveller.cpr_number}</span></div>
+        <div class="row"><span class="label">الاسم:</span><span class="value">${person.full_name_ar}</span></div>
+        <div class="row"><span class="label">رقم البطاقة:</span><span class="value">${person.cpr_number ?? '—'}</span></div>
         <div class="row"><span class="label">الوصف:</span><span class="value">${desc}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">${pm}</span></div>
         <div class="amount">المبلغ المستلم: ${formatSar(amt)} ريال سعودي</div>
@@ -280,18 +412,18 @@ export default function AdahiPage() {
 
   const printWakalaPdf = () => {
     const date = new Date().toLocaleDateString('ar-BH')
-    const wakalaTravellers = travellers
-      .filter((t: any) => hasWakala(t.id))
-      .sort((a: any, b: any) => (a.full_name_ar ?? '').localeCompare(b.full_name_ar ?? '', 'ar'))
+    const wakalaTravellers = people
+      .filter((p: AdahiListItem) => p.type === 'traveller' && hasWakala(p))
+      .sort((a, b) => (a.full_name_ar ?? '').localeCompare(b.full_name_ar ?? '', 'ar'))
 
-    const males = wakalaTravellers.filter((t: any) => t.gender === 'male')
-    const females = wakalaTravellers.filter((t: any) => t.gender === 'female')
+    const males = wakalaTravellers.filter((p: AdahiListItem) => p.gender === 'male')
+    const females = wakalaTravellers.filter((p: AdahiListItem) => p.gender === 'female')
     const otherGender = wakalaTravellers.filter(
-      (t: any) => t.gender !== 'male' && t.gender !== 'female'
+      (p: AdahiListItem) => p.gender !== 'male' && p.gender !== 'female'
     )
 
     const totalWakala = wakalaTravellers.length
-    const totalPaid = wakalaTravellers.filter((t: any) => hasPaid(t.id)).length
+    const totalPaid = wakalaTravellers.filter((p: AdahiListItem) => hasPaid(p)).length
     const totalNotPaid = totalWakala - totalPaid
 
     const escapeHtml = (s: string) =>
@@ -301,12 +433,12 @@ export default function AdahiPage() {
       list.length === 0
         ? '<tr><td colspan="5" style="text-align:center;color:#888">لا يوجد أسماء</td></tr>'
         : list
-            .map((t: any, i: number) => {
-              const paid = hasPaid(t.id)
+            .map((p: AdahiListItem, i: number) => {
+              const paid = hasPaid(p)
               return `<tr>
                 <td>${i + 1}</td>
-                <td>${escapeHtml(t.full_name_ar)}</td>
-                <td>${escapeHtml(t.cpr_number ?? '—')}</td>
+                <td>${escapeHtml(p.full_name_ar)}</td>
+                <td>${escapeHtml(p.cpr_number ?? '—')}</td>
                 <td class="ok">${checkMark(true)}</td>
                 <td class="${paid ? 'ok' : 'no'}">${checkMark(paid)}</td>
               </tr>`
@@ -407,7 +539,7 @@ export default function AdahiPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'إجمالي الحجاج', value: travellers.length, color: 'text-gray-800' },
+          { label: 'إجمالي القائمة', value: people.length, color: 'text-gray-800' },
           { label: 'المدفوعون', value: paidCount, color: 'text-green-600' },
           { label: 'الوكالة', value: wakalaCount, color: 'text-blue-600' },
           { label: 'مكتمل', value: completeCount, color: 'text-emerald-700' },
@@ -430,7 +562,7 @@ export default function AdahiPage() {
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input
             className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder="ابحث بالاسم أو رقم البطاقة..."
+            placeholder="ابحث بالاسم أو البطاقة أو المسمى..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -464,14 +596,15 @@ export default function AdahiPage() {
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center text-gray-400">لا يوجد نتائج</div>
         ) : (
-          filtered.map((t: any) => {
-            const inv = invoiceMap[t.id]
-            const isPaid = hasPaid(t.id)
-            const isWakala = hasWakala(t.id)
+          filtered.map((p: AdahiListItem) => {
+            const record = getPaymentRecord(p)
+            const isPaid = hasPaid(p)
+            const isWakala = hasWakala(p)
+            const isStaff = p.type === 'staff'
 
             return (
               <div
-                key={t.id}
+                key={`${p.type}-${p.id}`}
                 className={`bg-white rounded-xl border shadow-sm p-4 ${
                   isPaid && isWakala
                     ? 'border-emerald-300'
@@ -479,20 +612,44 @@ export default function AdahiPage() {
                       ? 'border-green-200'
                       : isWakala
                         ? 'border-blue-200'
-                        : 'border-gray-100'
-                }`}
+                        : isStaff
+                          ? 'border-purple-100'
+                          : 'border-gray-100'
+                } ${p.is_active === false ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-gray-800">{t.full_name_ar}</span>
-                      <span className="text-xs text-gray-400">
-                        {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
+                      <span className="font-bold text-gray-800">{p.full_name_ar}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          isStaff ? 'bg-purple-100 text-purple-700' : 'bg-emerald-50 text-emerald-700'
+                        }`}
+                      >
+                        {isStaff ? 'كادر' : 'حاج'}
                       </span>
+                      {!isStaff && (
+                        <span className="text-xs text-gray-400">
+                          {p.gender === 'male' ? 'ذكر' : p.gender === 'female' ? 'أنثى' : '—'}
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-400 font-mono mt-0.5">{t.cpr_number}</p>
+                    {isStaff ? (
+                      <>
+                        <p className="text-xs text-purple-600 mt-0.5">{p.role_title}</p>
+                        <p className="text-xs text-gray-400 font-mono mt-0.5" dir="ltr">
+                          {p.id.slice(0, 8)}…
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-400 font-mono mt-0.5">{p.cpr_number}</p>
+                    )}
                     {isPaid && (
-                      <p className="text-xs text-gray-400 mt-0.5">رقم الإيصال: {inv.invoice_number}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {record?.invoice_number
+                          ? `رقم الإيصال: ${record.invoice_number}`
+                          : `مصروف: ${record?.expense_number ?? '—'}`}
+                      </p>
                     )}
 
                     <div className="flex items-center gap-4 mt-3">
@@ -506,18 +663,22 @@ export default function AdahiPage() {
                         />
                         <span className={isPaid ? 'text-green-700 font-medium' : 'text-gray-500'}>دفع</span>
                       </label>
-                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isWakala}
-                          disabled={toggleWakala.isPending}
-                          onChange={() =>
-                            toggleWakala.mutate({ travellerId: t.id, next: !isWakala })
-                          }
-                          className="rounded border-gray-300 text-blue-600 w-4 h-4 cursor-pointer"
-                        />
-                        <span className={isWakala ? 'text-blue-700 font-medium' : 'text-gray-500'}>وكالة</span>
-                      </label>
+                      {!isStaff && (
+                        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isWakala}
+                            disabled={toggleWakala.isPending}
+                            onChange={() =>
+                              toggleWakala.mutate({ travellerId: p.id, next: !isWakala })
+                            }
+                            className="rounded border-gray-300 text-blue-600 w-4 h-4 cursor-pointer"
+                          />
+                          <span className={isWakala ? 'text-blue-700 font-medium' : 'text-gray-500'}>
+                            وكالة
+                          </span>
+                        </label>
+                      )}
                     </div>
                   </div>
 
@@ -528,10 +689,11 @@ export default function AdahiPage() {
                         onClick={() => {
                           createPayment.reset()
                           setPaymentModal({
-                            traveller: t,
+                            person: p,
                             amount: String(DEFAULT_AMOUNT),
-                            description: DEFAULT_DESC,
+                            description: isStaff ? STAFF_EXPENSE_DESC : DEFAULT_DESC,
                             paymentMethod: 'cash',
+                            recordAsExpense: isStaff,
                           })
                         }}
                         disabled={createPayment.isPending}
@@ -542,16 +704,20 @@ export default function AdahiPage() {
                       </button>
                     ) : (
                       <>
+                        {!isStaff && (
+                          <button
+                            type="button"
+                            onClick={() => printReceipt(p)}
+                            className="flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            <Printer size={13} /> إيصال PDF
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => printReceipt(t)}
-                          className="flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
-                        >
-                          <Printer size={13} /> إيصال PDF
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => window.confirm('حذف هذا الدفع؟') && deletePayment.mutate(t.id)}
+                          onClick={() =>
+                            window.confirm('حذف هذا الدفع؟') && deletePayment.mutate(p)
+                          }
                           className="text-xs text-red-400 hover:text-red-600 px-2 py-2 transition-colors"
                         >
                           حذف
@@ -561,19 +727,22 @@ export default function AdahiPage() {
                   </div>
                 </div>
 
-                {isPaid && (
+                {isPaid && record && (
                   <div className="mt-2 text-xs text-gray-500 flex items-center gap-4 flex-wrap">
                     <span>
                       المبلغ:{' '}
-                      <strong className="text-gray-700">{formatSar(Number(inv.amount ?? 0))} ر.س</strong>
+                      <strong className="text-gray-700">{formatSar(Number(record.amount ?? 0))} ر.س</strong>
                     </span>
-                    <span>
-                      {paymentMethodLabel(
-                        Array.isArray(inv.receipts)
-                          ? inv.receipts[0]?.payment_method
-                          : (inv.receipts as any)?.payment_method
-                      )}
-                    </span>
+                    {!isStaff && (
+                      <span>
+                        {paymentMethodLabel(
+                          Array.isArray(record.receipts)
+                            ? record.receipts[0]?.payment_method
+                            : (record.receipts as any)?.payment_method
+                        )}
+                      </span>
+                    )}
+                    {isStaff && <span>مصروف — الصندوق SAR</span>}
                   </div>
                 )}
               </div>
@@ -594,8 +763,54 @@ export default function AdahiPage() {
               id="adahi-payment-modal-title"
               className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-2"
             >
-              تسجيل دفع — {paymentModal.traveller.full_name_ar}
+              تسجيل دفع — {paymentModal.person.full_name_ar}
+              <span className="block text-xs font-normal text-gray-500 mt-1">
+                {paymentModal.person.type === 'staff' ? 'كادر' : 'حاج'}
+              </span>
             </h2>
+
+            {paymentModal.person.type === 'staff' ? (
+              <p className="text-sm text-purple-700 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
+                سيتم تسجيل الدفع كمصروف من الصندوق SAR: {STAFF_EXPENSE_DESC}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-gray-600">طريقة التسجيل</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPaymentModal(m =>
+                        m ? { ...m, recordAsExpense: false, description: DEFAULT_DESC } : m
+                      )
+                    }
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium border ${
+                      !paymentModal.recordAsExpense
+                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    فاتورة وإيصال
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPaymentModal(m =>
+                        m ? { ...m, recordAsExpense: true, description: DEFAULT_DESC } : m
+                      )
+                    }
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium border ${
+                      paymentModal.recordAsExpense
+                        ? 'bg-purple-700 text-white border-purple-700'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    مصروف
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">المبلغ</label>
               <input
@@ -613,24 +828,30 @@ export default function AdahiPage() {
                 type="text"
                 className={fieldClass}
                 value={paymentModal.description}
+                disabled={
+                  paymentModal.person.type === 'staff' ||
+                  (paymentModal.person.type === 'traveller' && paymentModal.recordAsExpense)
+                }
                 onChange={e => setPaymentModal(m => (m ? { ...m, description: e.target.value } : m))}
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">طريقة الدفع</label>
-              <select
-                className={fieldClass}
-                value={paymentModal.paymentMethod}
-                onChange={e =>
-                  setPaymentModal(m =>
-                    m ? { ...m, paymentMethod: e.target.value as AdahiPaymentMethod } : m
-                  )
-                }
-              >
-                <option value="cash">نقدي</option>
-                <option value="bank_transfer">تحويل بنكي</option>
-              </select>
-            </div>
+            {!paymentModal.recordAsExpense && paymentModal.person.type === 'traveller' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">طريقة الدفع</label>
+                <select
+                  className={fieldClass}
+                  value={paymentModal.paymentMethod}
+                  onChange={e =>
+                    setPaymentModal(m =>
+                      m ? { ...m, paymentMethod: e.target.value as AdahiPaymentMethod } : m
+                    )
+                  }
+                >
+                  <option value="cash">نقدي</option>
+                  <option value="bank_transfer">تحويل بنكي</option>
+                </select>
+              </div>
+            )}
             {createPayment.isError && (
               <p className="text-sm text-red-600">تعذّر الحفظ. تحقق من الاتصال أو الصلاحيات.</p>
             )}
@@ -655,10 +876,11 @@ export default function AdahiPage() {
                   const description = paymentModal.description.trim() || DEFAULT_DESC
                   if (!Number.isFinite(amt) || amt <= 0) return
                   createPayment.mutate({
-                    traveller: paymentModal.traveller,
+                    person: paymentModal.person,
                     amount: amt,
                     description,
                     paymentMethod: paymentModal.paymentMethod,
+                    recordAsExpense: paymentModal.recordAsExpense,
                   })
                 }}
               >
