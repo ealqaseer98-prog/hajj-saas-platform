@@ -95,9 +95,17 @@ export default function AdahiPage() {
       const { traveller, amount, description, paymentMethod } = payload
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('مبلغ غير صالح')
 
-      const { count: invCount } = await supabase
-        .from('invoices').select('*', { count: 'exact', head: true })
-      const invNum = `ADH-1447-${String((invCount ?? 0) + 1).padStart(3, '0')}`
+      const { data: lastInvData } = await supabase
+        .from('invoices')
+        .select('invoice_number')
+        .ilike('invoice_number', 'ADH-1447-%')
+        .order('invoice_number', { ascending: false })
+        .limit(1)
+
+      const lastNum = lastInvData?.[0]?.invoice_number
+        ? parseInt(lastInvData[0].invoice_number.split('-').pop() ?? '0', 10)
+        : 0
+      const invNum = `ADH-1447-${String(lastNum + 1).padStart(3, '0')}`
 
       const { data: inv, error: invErr } = await supabase
         .from('invoices')
