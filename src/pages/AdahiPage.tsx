@@ -124,9 +124,17 @@ export default function AdahiPage() {
 
       if (invErr) throw invErr
 
-      const { count: rcpCount } = await supabase
-        .from('receipts').select('*', { count: 'exact', head: true })
-      const rcpNum = `RCP-ADH-${String((rcpCount ?? 0) + 1).padStart(3, '0')}`
+      const { data: rcpData } = await supabase
+        .from('receipts')
+        .select('receipt_number')
+        .ilike('receipt_number', 'RCP-ADH-%')
+        .order('receipt_number', { ascending: false })
+        .limit(1)
+
+      const lastRcpNum = rcpData?.[0]?.receipt_number
+        ? parseInt(rcpData[0].receipt_number.split('-').pop() ?? '0', 10)
+        : 0
+      const rcpNum = `RCP-ADH-${String(lastRcpNum + 1).padStart(3, '0')}`
 
       const { error: rcpErr } = await supabase.from('receipts').insert({
         receipt_number: rcpNum,
