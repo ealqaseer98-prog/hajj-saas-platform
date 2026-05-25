@@ -620,18 +620,26 @@ export default function PilgrimPortalPage() {
               </div>
 
               {busInfo && (
-                <div className="bg-amber-500 rounded-2xl p-5 text-white shadow-md">
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <Bus size={24} className="opacity-90 shrink-0" />
-                    <p className="text-sm font-medium opacity-90">باصك</p>
-                  </div>
-                  <div className="flex items-center justify-center gap-4 flex-wrap">
-                    <span className="text-4xl font-bold leading-none tabular-nums">
-                      {busInfo.bus_number}
-                    </span>
-                    <p className="text-lg font-bold leading-snug text-right min-w-0">
-                      {busInfo.bus_name?.trim() || `باص ${busInfo.bus_number}`}
-                    </p>
+                <div className="bg-white border-2 border-emerald-600 rounded-2xl shadow-sm">
+                  <div className="flex flex-row items-stretch min-h-[128px]">
+                    {/* الوجهة — يمين في الواجهة العربية */}
+                    <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-5">
+                      <p className="text-xs text-gray-500 mb-2">الوجهة</p>
+                      <p className="text-base font-bold text-gray-800 leading-snug">
+                        {busInfo.bus_name?.trim() || `باص ${busInfo.bus_number}`}
+                      </p>
+                    </div>
+                    <div className="w-px shrink-0 bg-emerald-200 self-stretch my-3" aria-hidden />
+                    {/* رقم الباص — يسار في الواجهة العربية */}
+                    <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-5 gap-1">
+                      <span className="text-2xl leading-none" aria-hidden>
+                        🚌
+                      </span>
+                      <span className="text-4xl font-bold text-emerald-800 leading-none tabular-nums">
+                        {busInfo.bus_number}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">رقم الباص</p>
+                    </div>
                   </div>
                 </div>
               )}
