@@ -7,7 +7,20 @@ import {
   onForegroundMessage,
   type NotificationPermissionResult,
 } from '../lib/firebase'
-import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, Bell, BellOff, MessageSquare, X, Bus } from 'lucide-react'
+import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, Bell, BellOff, MessageSquare, X, Bus, Clock } from 'lucide-react'
+
+type HajjRituals = {
+  traveller_id: string
+  rami_completed: boolean
+  rami_time: string | null
+  dhabh_completed: boolean
+  dhabh_time: string | null
+}
+
+function formatRitualTime(iso: string | null | undefined) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('ar-BH', { dateStyle: 'short', timeStyle: 'short' })
+}
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
@@ -45,6 +58,10 @@ export default function PilgrimPortalPage() {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<string | null>(null)
   const [busInfo, setBusInfo] = useState<{ bus_number: number; bus_name: string | null } | null>(null)
+  const [hajjRituals, setHajjRituals] = useState<HajjRituals | null>(null)
+  const [ramiConfirmOpen, setRamiConfirmOpen] = useState(false)
+  const [ramiSubmitting, setRamiSubmitting] = useState(false)
+  const [ritualError, setRitualError] = useState('')
 
   const syncNotifPermission = () => {
     if (supportsWebNotifications()) {
@@ -217,6 +234,16 @@ export default function PilgrimPortalPage() {
           : null
       )
 
+      const { data: ritualsData } = await supabase
+        .from('hajj_rituals')
+        .select('traveller_id, rami_completed, rami_time, dhabh_completed, dhabh_time')
+        .eq('traveller_id', traveller.id)
+        .maybeSingle()
+
+      setHajjRituals((ritualsData as HajjRituals | null) ?? null)
+      setRamiConfirmOpen(false)
+      setRitualError('')
+
       setDocuments(docs ?? [])
       setRooms(roomsWithMates)
       setAdahiInv(invData ?? null)
@@ -283,6 +310,34 @@ export default function PilgrimPortalPage() {
     win.document.close()
   }
 
+  const confirmRami = async () => {
+    if (!traveller?.id) return
+    setRamiSubmitting(true)
+    setRitualError('')
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('hajj_rituals')
+      .upsert(
+        {
+          traveller_id: traveller.id,
+          rami_completed: true,
+          rami_time: now,
+          updated_at: now,
+        },
+        { onConflict: 'traveller_id' }
+      )
+      .select('traveller_id, rami_completed, rami_time, dhabh_completed, dhabh_time')
+      .single()
+
+    setRamiSubmitting(false)
+    if (error) {
+      setRitualError('تعذّر الحفظ. يرجى المحاولة مرة أخرى.')
+      return
+    }
+    setHajjRituals(data as HajjRituals)
+    setRamiConfirmOpen(false)
+  }
+
   const logout = () => {
     setStep('login')
     setCpr('')
@@ -294,6 +349,9 @@ export default function PilgrimPortalPage() {
     setNotifications([])
     setRoomRequests([])
     setBusInfo(null)
+    setHajjRituals(null)
+    setRamiConfirmOpen(false)
+    setRitualError('')
     setRequestModal(false)
     setRequestForm({ request_type: 'general', description: '' })
     setRequestSuccess(false)
@@ -848,10 +906,99 @@ export default function PilgrimPortalPage() {
                 )}
               </div>
 
+              {/* Rami & Dhabh */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  <span className="text-lg">🕋</span>
+                  رمي الجمرات والذبح
+                </h2>
+
+                {!hajjRituals?.rami_completed ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-500">
+                      بعد إتمام رمي الجمرات، اضغط الزر أدناه لتسجيل ذلك في النظام.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setRamiConfirmOpen(true)}
+                      className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-3 rounded-xl transition-colors"
+                    >
+                      أتممت رمي الجمرات ✓
+                    </button>
+                    {ritualError && (
+                      <p className="text-sm text-red-600 text-center">{ritualError}</p>
+                    )}
+                  </div>
+                ) : hajjRituals.dhabh_completed ? (
+                  <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                    <CheckCircle2 size={22} className="text-green-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-green-800">✓ تم الذبح</p>
+                      {hajjRituals.dhabh_time && (
+                        <p className="text-xs text-green-600 mt-1">
+                          {formatRitualTime(hajjRituals.dhabh_time)}
+                        </p>
+                      )}
+                      {hajjRituals.rami_time && (
+                        <p className="text-xs text-green-600/80 mt-0.5">
+                          رمي الجمرات: {formatRitualTime(hajjRituals.rami_time)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                    <Clock size={22} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-800">✓ تم رمي الجمرات — في انتظار الذبح</p>
+                      {hajjRituals.rami_time && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          {formatRitualTime(hajjRituals.rami_time)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
         </div>
       </div>
+
+      {/* Rami confirmation */}
+      {ramiConfirmOpen && step === 'portal' && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4" dir="rtl">
+            <h2 className="text-lg font-bold text-gray-800">تأكيد رمي الجمرات</h2>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              هل أتممت رمي الجمرات؟ لا يمكن التراجع عن هذا الإجراء.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50"
+                disabled={ramiSubmitting}
+                onClick={() => setRamiConfirmOpen(false)}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-800 disabled:opacity-50"
+                disabled={ramiSubmitting}
+                onClick={confirmRami}
+              >
+                {ramiSubmitting ? 'جارٍ الحفظ...' : 'تأكيد'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="text-center py-4 text-xs text-gray-400">

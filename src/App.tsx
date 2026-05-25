@@ -8,6 +8,7 @@ import {
   canAccessRoomRequests,
   canAccessStaffPage,
   canAccessBusAssignment,
+  canAccessDhabhPage,
 } from './lib/permissions'
 import Layout from './components/layout/Layout'
 import LoginPage           from './pages/LoginPage'
@@ -31,6 +32,7 @@ import NotificationsPage   from './pages/NotificationsPage'
 import RoomRequestsPage    from './pages/RoomRequestsPage'
 import StaffPage           from './pages/StaffPage'
 import BusAssignmentPage   from './pages/BusAssignmentPage'
+import DhabhPage           from './pages/DhabhPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 60 * 2 } }
@@ -95,6 +97,18 @@ function BusesRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function DhabhRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore(s => s.user)
+  const { pathname } = useLocation()
+  if (
+    (pathname === '/dhabh' || pathname.startsWith('/dhabh/')) &&
+    !canAccessDhabhPage(user?.role)
+  ) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
+}
+
 function RoleGuardedOutlet() {
   return (
     <CoordinatorRoute>
@@ -102,7 +116,9 @@ function RoleGuardedOutlet() {
         <RoomRequestsRoute>
           <StaffRoute>
             <BusesRoute>
-              <Layout />
+              <DhabhRoute>
+                <Layout />
+              </DhabhRoute>
             </BusesRoute>
           </StaffRoute>
         </RoomRequestsRoute>
@@ -138,6 +154,7 @@ export default function App() {
             <Route path="notifications"          element={<NotificationsPage />} />
             <Route path="room-requests"          element={<RoomRequestsPage />} />
             <Route path="buses"                    element={<BusAssignmentPage />} />
+            <Route path="dhabh"                    element={<DhabhPage />} />
             <Route path="staff"                   element={<StaffPage />} />
           </Route>
         </Routes>
