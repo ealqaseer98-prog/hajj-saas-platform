@@ -2,10 +2,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Bus, Printer, Shuffle, GripVertical, Plus, X, Trash2 } from 'lucide-react'
+import { Bus, Printer, Shuffle, GripVertical, Plus, X, Trash2, Pencil } from 'lucide-react'
 
 const DEFAULT_HOTEL_NAME = 'نزل إبداء اصداف'
 const DEFAULT_BUS_CAPACITY = 45
+
+const fieldClass =
+  'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500'
 const LOGO_URL =
   'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
@@ -136,6 +139,12 @@ export default function BusAssignmentPage() {
   const [activeBusNum, setActiveBusNum] = useState(1)
   const [manualNameByBus, setManualNameByBus] = useState<Record<string, string>>({})
   const [dragAssignmentId, setDragAssignmentId] = useState<string | null>(null)
+  const [editBusModal, setEditBusModal] = useState<{
+    busId: string
+    busNumber: string
+    busName: string
+    capacity: string
+  } | null>(null)
 
   const { data: hotelNames = [] } = useQuery({
     queryKey: ['hotel-names-list'],
@@ -218,7 +227,7 @@ export default function BusAssignmentPage() {
 
       const { error } = await supabase.from('buses').insert({
         bus_number: nextNum,
-        bus_name: `باص ${nextNum}`,
+        bus_name: null,
         capacity: DEFAULT_BUS_CAPACITY,
         hotel_name: hotelName,
       })
@@ -247,17 +256,47 @@ export default function BusAssignmentPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bus-assignment-data', hotelName] }),
   })
 
-  const updateBusCapacity = useMutation({
-    mutationFn: async ({ busId, capacity }: { busId: string; capacity: number }) => {
-      const cap = Math.max(1, capacity)
+  const updateBus = useMutation({
+    mutationFn: async (payload: {
+      busId: string
+      busNumber: number
+      busName: string
+      capacity: number
+    }) => {
+      const { busId, busNumber, busName, capacity } = payload
+      if (!Number.isFinite(busNumber) || busNumber < 1) throw new Error('رقم الباص غير صالح')
+      if (!Number.isFinite(capacity) || capacity < 1) throw new Error('السعة غير صالحة')
+
       const { error } = await supabase
         .from('buses')
-        .update({ capacity: cap, updated_at: new Date().toISOString() })
+        .update({
+          bus_number: busNumber,
+          bus_name: busName.trim() || null,
+          capacity,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', busId)
-      if (error) throw error
+      if (error) {
+        if (error.code === '23505') throw new Error('رقم الباص مستخدم بالفعل في هذا الفندق')
+        throw error
+      }
+      return busNumber
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['bus-assignment-data', hotelName] }),
+    onSuccess: newBusNumber => {
+      qc.invalidateQueries({ queryKey: ['bus-assignment-data', hotelName] })
+      setEditBusModal(null)
+      if (newBusNumber != null) setActiveBusNum(newBusNumber)
+    },
   })
+
+  const openEditBus = (bus: BusRow) => {
+    setEditBusModal({
+      busId: bus.id,
+      busNumber: String(bus.bus_number),
+      busName: bus.bus_name ?? '',
+      capacity: String(bus.capacity),
+    })
+  }
 
   const autoDistribute = useMutation({
     mutationFn: async () => {
@@ -357,7 +396,7 @@ export default function BusAssignmentPage() {
           <div class="logo-wrap"><img class="logo" src="${LOGO_URL}" alt="logo" crossorigin="anonymous" /></div>
           <div class="header">
             <h1>حملة العمار للحج والعمرة</h1>
-            <h2>قائمة ركاب ${escapeHtml(bus.bus_name ?? `باص ${bus.bus_number}`)}</h2>
+            <h2>قائمة ركاب باص ${bus.bus_number}${bus.bus_name ? ` — ${escapeHtml(bus.bus_name)}` : ''}</h2>
             <p class="sub">${escapeHtml(hotelName)} — ${date}</p>
           </div>
           <p class="meta">السعة: <strong>${bus.capacity}</strong> — العدد: <strong>${list.length}</strong></p>
@@ -517,6 +556,11 @@ export default function BusAssignmentPage() {
                 >
                   <span className="font-bold">{bus.bus_number}</span>
                   <span className="text-gray-500 font-normal mr-0.5">باص</span>
+                  {bus.bus_name?.trim() && (
+                    <span className="block text-[10px] text-gray-500 truncate max-w-[120px]">
+                      {bus.bus_name}
+                    </span>
+                  )}
                   <span className={`text-xs ${over ? 'text-red-600' : 'text-gray-400'}`}>
                     ({count}/{bus.capacity})
                   </span>
@@ -545,9 +589,7 @@ export default function BusAssignmentPage() {
                 onMove={(assignmentId, targetBusId) =>
                   moveAssignment.mutate({ assignmentId, targetBusId })
                 }
-                onCapacityChange={capacity =>
-                  updateBusCapacity.mutate({ busId: bus.id, capacity })
-                }
+                onEdit={() => openEditBus(bus)}
                 onDeleteBus={() => {
                   if (!window.confirm(`حذف باص ${bus.bus_number}؟`)) return
                   deleteBus.mutate(bus.id)
@@ -579,9 +621,7 @@ export default function BusAssignmentPage() {
                 onMove={(assignmentId, targetBusId) =>
                   moveAssignment.mutate({ assignmentId, targetBusId })
                 }
-                onCapacityChange={capacity =>
-                  updateBusCapacity.mutate({ busId: activeBus.id, capacity })
-                }
+                onEdit={() => openEditBus(activeBus)}
                 onDeleteBus={() => {
                   if (!window.confirm(`حذف باص ${activeBus.bus_number}؟`)) return
                   deleteBus.mutate(activeBus.id)
@@ -596,6 +636,94 @@ export default function BusAssignmentPage() {
           )}
         </>
       )}
+
+      {editBusModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-bus-modal-title"
+        >
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100">
+            <h2 id="edit-bus-modal-title" className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-2">
+              تعديل الباص
+            </h2>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">رقم الباص</label>
+              <input
+                type="number"
+                min={1}
+                className={fieldClass}
+                value={editBusModal.busNumber}
+                onChange={e =>
+                  setEditBusModal(m => (m ? { ...m, busNumber: e.target.value } : m))
+                }
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">اسم الرحلة</label>
+              <input
+                type="text"
+                className={fieldClass}
+                placeholder='مثال: رحلة مكة، رحلة المدينة'
+                value={editBusModal.busName}
+                onChange={e =>
+                  setEditBusModal(m => (m ? { ...m, busName: e.target.value } : m))
+                }
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">السعة</label>
+              <input
+                type="number"
+                min={1}
+                className={fieldClass}
+                value={editBusModal.capacity}
+                onChange={e =>
+                  setEditBusModal(m => (m ? { ...m, capacity: e.target.value } : m))
+                }
+              />
+            </div>
+            {updateBus.isError && (
+              <p className="text-sm text-red-600">
+                {(updateBus.error as Error).message || 'تعذّر الحفظ'}
+              </p>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50"
+                disabled={updateBus.isPending}
+                onClick={() => {
+                  updateBus.reset()
+                  setEditBusModal(null)
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-emerald-800"
+                disabled={updateBus.isPending}
+                onClick={() => {
+                  const busNumber = Number(editBusModal.busNumber)
+                  const capacity = Number(editBusModal.capacity)
+                  if (!Number.isFinite(busNumber) || busNumber < 1) return
+                  if (!Number.isFinite(capacity) || capacity < 1) return
+                  updateBus.mutate({
+                    busId: editBusModal.busId,
+                    busNumber,
+                    busName: editBusModal.busName,
+                    capacity,
+                  })
+                }}
+              >
+                {updateBus.isPending ? 'جارٍ الحفظ...' : 'حفظ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -609,7 +737,7 @@ function BusColumn({
   onAddManual,
   onRemove,
   onMove,
-  onCapacityChange,
+  onEdit,
   onDeleteBus,
   canDelete,
   isDeleting,
@@ -625,7 +753,7 @@ function BusColumn({
   onAddManual: () => void
   onRemove: (id: string) => void
   onMove: (assignmentId: string, targetBusId: string) => void
-  onCapacityChange: (capacity: number) => void
+  onEdit: () => void
   onDeleteBus: () => void
   canDelete: boolean
   isDeleting: boolean
@@ -635,20 +763,7 @@ function BusColumn({
 }) {
   const count = assignments.length
   const over = count > bus.capacity
-  const [capacityDraft, setCapacityDraft] = useState(String(bus.capacity))
-
-  useEffect(() => {
-    setCapacityDraft(String(bus.capacity))
-  }, [bus.capacity])
-
-  const commitCapacity = () => {
-    const n = Number(capacityDraft)
-    if (!Number.isFinite(n) || n < 1) {
-      setCapacityDraft(String(bus.capacity))
-      return
-    }
-    if (n !== bus.capacity) onCapacityChange(n)
-  }
+  const tripName = bus.bus_name?.trim()
 
   return (
     <div
@@ -669,34 +784,37 @@ function BusColumn({
           <div className="min-w-0">
             <p className="text-[10px] text-emerald-800/80 font-medium uppercase tracking-wide">باص</p>
             <p className="text-3xl font-bold text-emerald-900 leading-none">{bus.bus_number}</p>
-            <p className="text-xs text-gray-600 mt-1 truncate">{bus.bus_name ?? `باص ${bus.bus_number}`}</p>
+            {tripName ? (
+              <p className="text-sm font-semibold text-emerald-800 mt-1.5 leading-snug">{tripName}</p>
+            ) : (
+              <p className="text-xs text-gray-400 mt-1.5 italic">بدون اسم رحلة</p>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={onDeleteBus}
-            disabled={!canDelete || isDeleting}
-            title={canDelete ? 'حذف الباص' : 'لا يمكن الحذف — يوجد ركاب'}
-            className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="حذف الباص"
-          >
-            <Trash2 size={16} />
-          </button>
+          <div className="flex shrink-0 gap-0.5">
+            <button
+              type="button"
+              onClick={onEdit}
+              title="تعديل الباص"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-700 hover:bg-emerald-100/80"
+              aria-label="تعديل الباص"
+            >
+              <Pencil size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={onDeleteBus}
+              disabled={!canDelete || isDeleting}
+              title={canDelete ? 'حذف الباص' : 'لا يمكن الحذف — يوجد ركاب'}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="حذف الباص"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
         </div>
-        <div className="mt-2 flex items-center gap-2 flex-wrap">
-          <label className="text-xs text-gray-600 shrink-0">السعة</label>
-          <input
-            type="number"
-            min={1}
-            className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center bg-white"
-            value={capacityDraft}
-            onChange={e => setCapacityDraft(e.target.value)}
-            onBlur={commitCapacity}
-            onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-          />
-          <span className={`text-xs ${over ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
-            العدد: {count} / {bus.capacity}
-          </span>
-        </div>
+        <p className={`mt-2 text-xs ${over ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+          العدد: {count} / {bus.capacity}
+        </p>
       </div>
 
       <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[420px]">
@@ -728,7 +846,8 @@ function BusColumn({
                   >
                     {allBuses.map(b => (
                       <option key={b.id} value={b.id}>
-                        {b.bus_name ?? `باص ${b.bus_number}`}
+                        {b.bus_number}
+                        {b.bus_name?.trim() ? ` — ${b.bus_name}` : ''}
                       </option>
                     ))}
                   </select>
