@@ -36,7 +36,15 @@ type RoomGroupMember = {
   full_name_ar: string
   room_number: string
   room_id: string
+  gender: string | null
 }
+
+type RoomGroup = {
+  room_id: string
+  members: RoomGroupMember[]
+}
+
+type RoomGroupKind = 'female' | 'male' | 'mixed'
 
 function displayName(a: AssignmentRow): string {
   return a.traveller?.full_name_ar ?? a.display_name ?? '—'
@@ -49,51 +57,123 @@ function escapeHtml(s: string) {
     .replace(/>/g, '&gt;')
 }
 
-/** Place room groups on buses; keep each room together; balance load. */
-function planDistribution(
-  groups: { room_id: string; members: RoomGroupMember[] }[],
-  buses: BusRow[]
-): { bus_id: string; traveller_id: string; display_name: string; room_number: string; sort_order: number }[] {
-  const counts = new Map(buses.map(b => [b.id, 0]))
-  const planned: {
-    bus_id: string
-    traveller_id: string
-    display_name: string
-    room_number: string
-    sort_order: number
-  }[] = []
+type PlannedAssignment = {
+  bus_id: string
+  traveller_id: string
+  display_name: string
+  room_number: string
+  sort_order: number
+}
 
-  const sortedGroups = [...groups].sort((a, b) => b.members.length - a.members.length)
+function classifyRoomGroup(members: RoomGroupMember[]): RoomGroupKind {
+  const genders = members.map(m => m.gender).filter((g): g is string => g === 'male' || g === 'female')
+  if (genders.length === 0) return 'mixed'
+  if (genders.every(g => g === 'female')) return 'female'
+  if (genders.every(g => g === 'male')) return 'male'
+  return 'mixed'
+}
 
-  for (const group of sortedGroups) {
-    const size = group.members.length
-    const pickBus = () => {
-      const withSpace = buses.filter(b => (counts.get(b.id) ?? 0) + size <= b.capacity)
-      const pool = withSpace.length > 0 ? withSpace : buses
-      return pool.reduce((best, b) => {
-        const c = counts.get(b.id) ?? 0
-        const bestC = counts.get(best.id) ?? 0
-        return c < bestC ? b : best
-      }, pool[0])
-    }
-    const bus = pickBus()
-    if (!bus) continue
-    let order = counts.get(bus.id) ?? 0
-    for (const m of group.members) {
-      planned.push({
-        bus_id: bus.id,
-        traveller_id: m.traveller_id,
-        display_name: m.full_name_ar,
-        room_number: m.room_number,
-        sort_order: order++,
-      })
-    }
-    counts.set(bus.id, order)
+function addGroupToBus(
+  group: RoomGroup,
+  bus: BusRow,
+  counts: Map<string, number>,
+  planned: PlannedAssignment[]
+) {
+  let order = counts.get(bus.id) ?? 0
+  for (const m of group.members) {
+    planned.push({
+      bus_id: bus.id,
+      traveller_id: m.traveller_id,
+      display_name: m.full_name_ar,
+      room_number: m.room_number,
+      sort_order: order++,
+    })
   }
+  counts.set(bus.id, order)
+}
+
+/** Place room groups on target buses (room stays together); returns groups that did not fit. */
+function assignGroupsToBusPool(
+  groups: RoomGroup[],
+  pool: BusRow[],
+  counts: Map<string, number>,
+  planned: PlannedAssignment[]
+): RoomGroup[] {
+  if (pool.length === 0) return [...groups]
+
+  const remaining: RoomGroup[] = []
+  const sorted = [...groups].sort((a, b) => b.members.length - a.members.length)
+
+  for (const group of sorted) {
+    const size = group.members.length
+    const ordered = [...pool].sort(
+      (a, b) => (counts.get(a.id) ?? 0) - (counts.get(b.id) ?? 0)
+    )
+    const bus = ordered.find(b => (counts.get(b.id) ?? 0) + size <= b.capacity)
+    if (bus) {
+      addGroupToBus(group, bus, counts, planned)
+    } else {
+      remaining.push(group)
+    }
+  }
+  return remaining
+}
+
+/**
+ * Bus 1 (bus_number=1): all-female rooms.
+ * Bus 2 (bus_number=2): all-male rooms up to capacity.
+ * Bus 3+: overflow + mixed-gender rooms.
+ */
+function planDistribution(groups: RoomGroup[], buses: BusRow[]): PlannedAssignment[] {
+  const sortedBuses = [...buses].sort((a, b) => a.bus_number - b.bus_number)
+  const femaleBus = sortedBuses.find(b => b.bus_number === 1) ?? sortedBuses[0]
+  const maleBus = sortedBuses.find(b => b.bus_number === 2) ?? sortedBuses[1]
+  const mixedBuses = sortedBuses.filter(b => b.bus_number >= 3)
+  const mixedPool =
+    mixedBuses.length > 0
+      ? mixedBuses
+      : sortedBuses.length > 2
+        ? sortedBuses.slice(2)
+        : maleBus
+          ? [maleBus]
+          : [sortedBuses[sortedBuses.length - 1]]
+
+  const femaleGroups: RoomGroup[] = []
+  const maleGroups: RoomGroup[] = []
+  const mixedRoomGroups: RoomGroup[] = []
+
+  for (const group of groups) {
+    const kind = classifyRoomGroup(group.members)
+    if (kind === 'female') femaleGroups.push(group)
+    else if (kind === 'male') maleGroups.push(group)
+    else mixedRoomGroups.push(group)
+  }
+
+  const counts = new Map(sortedBuses.map(b => [b.id, 0]))
+  const planned: PlannedAssignment[] = []
+
+  const femaleOverflow = femaleBus
+    ? assignGroupsToBusPool(femaleGroups, [femaleBus], counts, planned)
+    : [...femaleGroups]
+
+  const maleOverflow = maleBus
+    ? assignGroupsToBusPool(maleGroups, [maleBus], counts, planned)
+    : [...maleGroups]
+
+  const forMixed = [...femaleOverflow, ...maleOverflow, ...mixedRoomGroups]
+  const stillRemaining = assignGroupsToBusPool(forMixed, mixedPool, counts, planned)
+
+  if (stillRemaining.length > 0) {
+    const people = stillRemaining.reduce((n, g) => n + g.members.length, 0)
+    throw new Error(
+      `تعذّر توزيع ${stillRemaining.length} غرفة (${people} حاج) — زِد سعة باص 3 أو أضف باصات للفائض`
+    )
+  }
+
   return planned
 }
 
-async function fetchHotelRoomGroups(hotelName: string): Promise<{ room_id: string; members: RoomGroupMember[] }[]> {
+async function fetchHotelRoomGroups(hotelName: string): Promise<RoomGroup[]> {
   const { data: hotels } = await supabase.from('hotels').select('id').eq('hotel_name', hotelName)
   const hotelIds = (hotels ?? []).map((h: { id: string }) => h.id)
   if (hotelIds.length === 0) return []
@@ -111,7 +191,7 @@ async function fetchHotelRoomGroups(hotelName: string): Promise<{ room_id: strin
 
   const { data: assignments, error } = await supabase
     .from('room_assignments')
-    .select('room_id, traveller_id, traveller:travellers(id, full_name_ar)')
+    .select('room_id, traveller_id, traveller:travellers(id, full_name_ar, gender)')
     .in('room_id', roomIds)
 
   if (error) throw error
@@ -127,6 +207,7 @@ async function fetchHotelRoomGroups(hotelName: string): Promise<{ room_id: strin
       traveller_id: t.id,
       full_name_ar: t.full_name_ar,
       room_number: roomNumById[rid] ?? '—',
+      gender: t.gender ?? null,
     })
   }
 
@@ -308,6 +389,11 @@ export default function BusAssignmentPage() {
       if (busErr) throw busErr
       const busList = (refreshed ?? []) as BusRow[]
       if (busList.length === 0) throw new Error('أضف باصاً واحداً على الأقل قبل التوزيع')
+      const hasBus1 = busList.some(b => b.bus_number === 1)
+      const hasBus2 = busList.some(b => b.bus_number === 2)
+      if (!hasBus1 || !hasBus2) {
+        throw new Error('للتوزيع التلقائي أضف باص 1 (إناث) وباص 2 (ذكور) على الأقل')
+      }
 
       const groups = await fetchHotelRoomGroups(hotelName)
       if (groups.length === 0) throw new Error('لا يوجد حجاج مسكنون في هذا الفندق')
@@ -459,7 +545,9 @@ export default function BusAssignmentPage() {
             <Bus className="text-emerald-700" size={26} />
             توزيع الباصات
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">توزيع الحجاج حسب الغرف مع إبقاء زملاء الغرفة في نفس الباص</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            التوزيع التلقائي: باص 1 إناث، باص 2 ذكور، باص 3+ مختلط — مع إبقاء زملاء الغرفة معاً
+          </p>
         </div>
         <button
           type="button"
