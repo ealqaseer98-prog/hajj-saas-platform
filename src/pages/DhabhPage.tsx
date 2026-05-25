@@ -2,13 +2,21 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../store/authStore'
+import { isAdmin } from '../lib/permissions'
 import {
   Landmark,
   Search,
   RefreshCw,
   CheckCircle2,
   X,
+  Undo2,
 } from 'lucide-react'
+
+type ConfirmAction =
+  | { type: 'dhabh'; travellerId: string; name: string }
+  | { type: 'undo-dhabh'; travellerId: string; name: string }
+  | { type: 'undo-rami'; travellerId: string; name: string }
 
 type DhabhFilter = 'all' | 'pending' | 'completed'
 
@@ -43,10 +51,11 @@ function roomNumber(row: RitualRow): string {
 
 export default function DhabhPage() {
   const qc = useQueryClient()
+  const authUser = useAuthStore(s => s.user)
+  const showAdminUndo = isAdmin(authUser?.role)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<DhabhFilter>('all')
-  const [confirmTravellerId, setConfirmTravellerId] = useState<string | null>(null)
-  const [confirmName, setConfirmName] = useState('')
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
 
   const { data: rows = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: ['dhabh-queue'],
@@ -92,10 +101,52 @@ export default function DhabhPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dhabh-queue'] })
-      setConfirmTravellerId(null)
-      setConfirmName('')
+      setConfirmAction(null)
     },
   })
+
+  const undoDhabh = useMutation({
+    mutationFn: async (travellerId: string) => {
+      const now = new Date().toISOString()
+      const { error } = await supabase
+        .from('hajj_rituals')
+        .update({
+          dhabh_completed: false,
+          dhabh_time: null,
+          updated_at: now,
+        })
+        .eq('traveller_id', travellerId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dhabh-queue'] })
+      setConfirmAction(null)
+    },
+  })
+
+  const undoRami = useMutation({
+    mutationFn: async (travellerId: string) => {
+      const now = new Date().toISOString()
+      const { error } = await supabase
+        .from('hajj_rituals')
+        .update({
+          rami_completed: false,
+          rami_time: null,
+          dhabh_completed: false,
+          dhabh_time: null,
+          updated_at: now,
+        })
+        .eq('traveller_id', travellerId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dhabh-queue'] })
+      setConfirmAction(null)
+    },
+  })
+
+  const actionPending =
+    markDhabh.isPending || undoDhabh.isPending || undoRami.isPending
 
   const pendingCount = rows.filter(r => !r.dhabh_completed).length
   const completedCount = rows.filter(r => r.dhabh_completed).length
@@ -116,9 +167,51 @@ export default function DhabhPage() {
     return matchSearch && matchFilter
   })
 
-  const openConfirm = (row: RitualRow) => {
-    setConfirmTravellerId(row.traveller_id)
-    setConfirmName(row.traveller?.full_name_ar ?? '')
+  const handleConfirm = () => {
+    if (!confirmAction) return
+    if (confirmAction.type === 'dhabh') markDhabh.mutate(confirmAction.travellerId)
+    else if (confirmAction.type === 'undo-dhabh') undoDhabh.mutate(confirmAction.travellerId)
+    else if (confirmAction.type === 'undo-rami') undoRami.mutate(confirmAction.travellerId)
+  }
+
+  const confirmCopy = (action: ConfirmAction) => {
+    if (action.type === 'dhabh') {
+      return {
+        title: 'تأكيد الذبح',
+        body: (
+          <>
+            هل تم ذبح أضحية <strong>{action.name}</strong>؟ لا يمكن التراجع عن هذا الإجراء إلا من قبل
+            المسؤول.
+          </>
+        ),
+        confirmLabel: 'تأكيد',
+        confirmClass: 'bg-emerald-700 hover:bg-emerald-800',
+      }
+    }
+    if (action.type === 'undo-dhabh') {
+      return {
+        title: 'تراجع عن الذبح',
+        body: (
+          <>
+            هل تريد التراجع عن تسجيل الذبح لـ <strong>{action.name}</strong>؟ سيعود الحاج إلى قائمة
+            الانتظار.
+          </>
+        ),
+        confirmLabel: 'تراجع عن الذبح',
+        confirmClass: 'bg-amber-600 hover:bg-amber-700',
+      }
+    }
+    return {
+      title: 'تراجع عن الرمي',
+      body: (
+        <>
+          هل تريد التراجع عن تسجيل رمي الجمرات لـ <strong>{action.name}</strong>؟ سيتم إلغاء الذبح
+          أيضاً وإزالة الحاج من هذه القائمة.
+        </>
+      ),
+      confirmLabel: 'تراجع عن الرمي',
+      confirmClass: 'bg-red-600 hover:bg-red-700',
+    }
   }
 
   return (
@@ -187,7 +280,7 @@ export default function DhabhPage() {
         </div>
       </div>
 
-      {markDhabh.isError && (
+      {(markDhabh.isError || undoDhabh.isError || undoRami.isError) && (
         <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
           تعذّر التحديث. تأكد من تطبيق جدول hajj_rituals في Supabase.
         </p>
@@ -229,21 +322,67 @@ export default function DhabhPage() {
                     </div>
                   </div>
 
-                  {done ? (
-                    <div className="flex items-center gap-1.5 text-green-700 text-sm font-medium shrink-0">
-                      <CheckCircle2 size={18} />
-                      تم الذبح
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => openConfirm(row)}
-                      disabled={markDhabh.isPending}
-                      className="shrink-0 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                    >
-                      تم الذبح ✓
-                    </button>
-                  )}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                    {done ? (
+                      <div className="flex items-center gap-1.5 text-green-700 text-sm font-medium px-1">
+                        <CheckCircle2 size={18} />
+                        تم الذبح
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setConfirmAction({
+                            type: 'dhabh',
+                            travellerId: row.traveller_id,
+                            name: row.traveller?.full_name_ar ?? '',
+                          })
+                        }
+                        disabled={actionPending}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                      >
+                        تم الذبح ✓
+                      </button>
+                    )}
+                    {showAdminUndo && (
+                      <div className="flex flex-wrap gap-2">
+                        {row.rami_completed && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmAction({
+                                type: 'undo-rami',
+                                travellerId: row.traveller_id,
+                                name: row.traveller?.full_name_ar ?? '',
+                              })
+                            }
+                            disabled={actionPending}
+                            className="flex items-center gap-1.5 border border-red-200 text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50"
+                          >
+                            <Undo2 size={14} />
+                            تراجع عن الرمي
+                          </button>
+                        )}
+                        {done && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmAction({
+                                type: 'undo-dhabh',
+                                travellerId: row.traveller_id,
+                                name: row.traveller?.full_name_ar ?? '',
+                              })
+                            }
+                            disabled={actionPending}
+                            className="flex items-center gap-1.5 border border-amber-200 text-amber-800 hover:bg-amber-50 px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50"
+                          >
+                            <Undo2 size={14} />
+                            تراجع عن الذبح
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -251,54 +390,50 @@ export default function DhabhPage() {
         )}
       </div>
 
-      {confirmTravellerId && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100">
-            <div className="flex items-start justify-between gap-2">
-              <h2 className="text-lg font-bold text-gray-800">تأكيد الذبح</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmTravellerId(null)
-                  setConfirmName('')
-                }}
-                className="text-gray-400 hover:text-gray-600"
-                aria-label="إغلاق"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              هل تم ذبح أضحية <strong>{confirmName}</strong>؟ لا يمكن التراجع عن هذا الإجراء.
-            </p>
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50"
-                disabled={markDhabh.isPending}
-                onClick={() => {
-                  setConfirmTravellerId(null)
-                  setConfirmName('')
-                }}
-              >
-                إلغاء
-              </button>
-              <button
-                type="button"
-                className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-800 disabled:opacity-50"
-                disabled={markDhabh.isPending}
-                onClick={() => markDhabh.mutate(confirmTravellerId)}
-              >
-                {markDhabh.isPending ? 'جارٍ الحفظ...' : 'تأكيد'}
-              </button>
+      {confirmAction && (() => {
+        const copy = confirmCopy(confirmAction)
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100">
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="text-lg font-bold text-gray-800">{copy.title}</h2>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label="إغلاق"
+                  disabled={actionPending}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 leading-relaxed">{copy.body}</p>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50"
+                  disabled={actionPending}
+                  onClick={() => setConfirmAction(null)}
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 ${copy.confirmClass}`}
+                  disabled={actionPending}
+                  onClick={handleConfirm}
+                >
+                  {actionPending ? 'جارٍ الحفظ...' : copy.confirmLabel}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
