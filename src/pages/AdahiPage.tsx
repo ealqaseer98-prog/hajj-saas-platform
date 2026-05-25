@@ -129,8 +129,14 @@ export default function AdahiPage() {
   const { data: adahiStatusRows = [] } = useQuery({
     queryKey: ['adahi-status'],
     queryFn: async () => {
-      const { data } = await supabase.from('adahi_status').select('traveller_id, has_wakala')
-      return (data ?? []) as { traveller_id: string; has_wakala: boolean }[]
+      const { data } = await supabase
+        .from('adahi_status')
+        .select('traveller_id, staff_id, has_wakala')
+      return (data ?? []) as {
+        traveller_id: string | null
+        staff_id: string | null
+        has_wakala: boolean
+      }[]
     },
   })
 
@@ -160,9 +166,11 @@ export default function AdahiPage() {
     if (travellerId) travellerExpenseMap[travellerId] = exp
   })
 
-  const wakalaMap: Record<string, boolean> = {}
+  const wakalaTravellerMap: Record<string, boolean> = {}
+  const wakalaStaffMap: Record<string, boolean> = {}
   adahiStatusRows.forEach(row => {
-    wakalaMap[row.traveller_id] = row.has_wakala
+    if (row.traveller_id) wakalaTravellerMap[row.traveller_id] = row.has_wakala
+    if (row.staff_id) wakalaStaffMap[row.staff_id] = row.has_wakala
   })
 
   const hasPaid = (person: AdahiListItem) =>
@@ -171,7 +179,9 @@ export default function AdahiPage() {
       : !!staffExpenseMap[person.id]
 
   const hasWakala = (person: AdahiListItem) =>
-    person.type === 'traveller' ? !!wakalaMap[person.id] : false
+    person.type === 'traveller'
+      ? !!wakalaTravellerMap[person.id]
+      : !!wakalaStaffMap[person.id]
 
   const getPaymentRecord = (person: AdahiListItem) =>
     person.type === 'traveller'
@@ -308,15 +318,35 @@ export default function AdahiPage() {
   })
 
   const toggleWakala = useMutation({
-    mutationFn: async ({ travellerId, next }: { travellerId: string; next: boolean }) => {
-      await supabase.from('adahi_status').upsert(
-        {
-          traveller_id: travellerId,
-          has_wakala: next,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'traveller_id' }
-      ).throwOnError()
+    mutationFn: async ({ person, next }: { person: AdahiListItem; next: boolean }) => {
+      const updated_at = new Date().toISOString()
+      if (person.type === 'staff') {
+        await supabase
+          .from('adahi_status')
+          .upsert(
+            {
+              staff_id: person.id,
+              traveller_id: null,
+              has_wakala: next,
+              updated_at,
+            },
+            { onConflict: 'staff_id' }
+          )
+          .throwOnError()
+        return
+      }
+      await supabase
+        .from('adahi_status')
+        .upsert(
+          {
+            traveller_id: person.id,
+            staff_id: null,
+            has_wakala: next,
+            updated_at,
+          },
+          { onConflict: 'traveller_id' }
+        )
+        .throwOnError()
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['adahi-status'] })
@@ -412,18 +442,18 @@ export default function AdahiPage() {
 
   const printWakalaPdf = () => {
     const date = new Date().toLocaleDateString('ar-BH')
-    const wakalaTravellers = people
-      .filter((p: AdahiListItem) => p.type === 'traveller' && hasWakala(p))
+    const wakalaPeople = people
+      .filter((p: AdahiListItem) => hasWakala(p))
       .sort((a, b) => (a.full_name_ar ?? '').localeCompare(b.full_name_ar ?? '', 'ar'))
 
-    const males = wakalaTravellers.filter((p: AdahiListItem) => p.gender === 'male')
-    const females = wakalaTravellers.filter((p: AdahiListItem) => p.gender === 'female')
-    const otherGender = wakalaTravellers.filter(
+    const males = wakalaPeople.filter((p: AdahiListItem) => p.gender === 'male')
+    const females = wakalaPeople.filter((p: AdahiListItem) => p.gender === 'female')
+    const otherGender = wakalaPeople.filter(
       (p: AdahiListItem) => p.gender !== 'male' && p.gender !== 'female'
     )
 
-    const totalWakala = wakalaTravellers.length
-    const totalPaid = wakalaTravellers.filter((p: AdahiListItem) => hasPaid(p)).length
+    const totalWakala = wakalaPeople.length
+    const totalPaid = wakalaPeople.filter((p: AdahiListItem) => hasPaid(p)).length
     const totalNotPaid = totalWakala - totalPaid
 
     const escapeHtml = (s: string) =>
@@ -438,7 +468,9 @@ export default function AdahiPage() {
               return `<tr>
                 <td>${i + 1}</td>
                 <td>${escapeHtml(p.full_name_ar)}</td>
-                <td>${escapeHtml(p.cpr_number ?? '—')}</td>
+                <td>${escapeHtml(
+                  p.type === 'staff' ? (p.role_title ?? 'كادر') : (p.cpr_number ?? '—')
+                )}</td>
                 <td class="ok">${checkMark(true)}</td>
                 <td class="${paid ? 'ok' : 'no'}">${checkMark(paid)}</td>
               </tr>`
@@ -453,7 +485,7 @@ export default function AdahiPage() {
             <tr>
               <th>#</th>
               <th>الاسم</th>
-              <th>رقم البطاقة</th>
+              <th>البطاقة / المسمى</th>
               <th>الوكالة</th>
               <th>الدفع</th>
             </tr>
@@ -663,22 +695,20 @@ export default function AdahiPage() {
                         />
                         <span className={isPaid ? 'text-green-700 font-medium' : 'text-gray-500'}>دفع</span>
                       </label>
-                      {!isStaff && (
-                        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isWakala}
-                            disabled={toggleWakala.isPending}
-                            onChange={() =>
-                              toggleWakala.mutate({ travellerId: p.id, next: !isWakala })
-                            }
-                            className="rounded border-gray-300 text-blue-600 w-4 h-4 cursor-pointer"
-                          />
-                          <span className={isWakala ? 'text-blue-700 font-medium' : 'text-gray-500'}>
-                            وكالة
-                          </span>
-                        </label>
-                      )}
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isWakala}
+                          disabled={toggleWakala.isPending}
+                          onChange={() =>
+                            toggleWakala.mutate({ person: p, next: !isWakala })
+                          }
+                          className="rounded border-gray-300 text-blue-600 w-4 h-4 cursor-pointer"
+                        />
+                        <span className={isWakala ? 'text-blue-700 font-medium' : 'text-gray-500'}>
+                          وكالة
+                        </span>
+                      </label>
                     </div>
                   </div>
 
