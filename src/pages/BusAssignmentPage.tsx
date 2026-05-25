@@ -120,23 +120,16 @@ function assignGroupsToBusPool(
 }
 
 /**
- * Bus 1 (bus_number=1): all-female rooms.
- * Bus 2 (bus_number=2): all-male rooms up to capacity.
- * Bus 3+: overflow + mixed-gender rooms.
+ * Uses existing buses only (sorted by bus_number):
+ * - Lowest number: all-female rooms (roommates together).
+ * - Second lowest: all-male rooms up to capacity.
+ * - Any other buses: overflow + mixed-gender rooms.
  */
 function planDistribution(groups: RoomGroup[], buses: BusRow[]): PlannedAssignment[] {
   const sortedBuses = [...buses].sort((a, b) => a.bus_number - b.bus_number)
-  const femaleBus = sortedBuses.find(b => b.bus_number === 1) ?? sortedBuses[0]
-  const maleBus = sortedBuses.find(b => b.bus_number === 2) ?? sortedBuses[1]
-  const mixedBuses = sortedBuses.filter(b => b.bus_number >= 3)
-  const mixedPool =
-    mixedBuses.length > 0
-      ? mixedBuses
-      : sortedBuses.length > 2
-        ? sortedBuses.slice(2)
-        : maleBus
-          ? [maleBus]
-          : [sortedBuses[sortedBuses.length - 1]]
+  const femaleBus = sortedBuses[0]
+  const maleBus = sortedBuses[1]
+  const remainingBuses = sortedBuses.slice(2)
 
   const femaleGroups: RoomGroup[] = []
   const maleGroups: RoomGroup[] = []
@@ -152,21 +145,21 @@ function planDistribution(groups: RoomGroup[], buses: BusRow[]): PlannedAssignme
   const counts = new Map(sortedBuses.map(b => [b.id, 0]))
   const planned: PlannedAssignment[] = []
 
-  const femaleOverflow = femaleBus
-    ? assignGroupsToBusPool(femaleGroups, [femaleBus], counts, planned)
-    : [...femaleGroups]
+  const femaleOverflow = assignGroupsToBusPool(femaleGroups, [femaleBus], counts, planned)
+  const maleOverflow = assignGroupsToBusPool(maleGroups, [maleBus], counts, planned)
 
-  const maleOverflow = maleBus
-    ? assignGroupsToBusPool(maleGroups, [maleBus], counts, planned)
-    : [...maleGroups]
-
-  const forMixed = [...femaleOverflow, ...maleOverflow, ...mixedRoomGroups]
-  const stillRemaining = assignGroupsToBusPool(forMixed, mixedPool, counts, planned)
+  const forRemaining = [...femaleOverflow, ...maleOverflow, ...mixedRoomGroups]
+  const stillRemaining =
+    remainingBuses.length > 0
+      ? assignGroupsToBusPool(forRemaining, remainingBuses, counts, planned)
+      : forRemaining
 
   if (stillRemaining.length > 0) {
     const people = stillRemaining.reduce((n, g) => n + g.members.length, 0)
     throw new Error(
-      `تعذّر توزيع ${stillRemaining.length} غرفة (${people} حاج) — زِد سعة باص 3 أو أضف باصات للفائض`
+      remainingBuses.length === 0
+        ? `تعذّر توزيع ${people} حاج — أضف باصاً ثالثاً أو أكثر للفائض والغرف المختلطة`
+        : `تعذّر توزيع ${stillRemaining.length} غرفة (${people} حاج) — زِد سعة الباصات المتبقية أو أضف باصات`
     )
   }
 
@@ -388,22 +381,19 @@ export default function BusAssignmentPage() {
         .order('bus_number')
       if (busErr) throw busErr
       const busList = (refreshed ?? []) as BusRow[]
-      if (busList.length === 0) throw new Error('أضف باصاً واحداً على الأقل قبل التوزيع')
-      const hasBus1 = busList.some(b => b.bus_number === 1)
-      const hasBus2 = busList.some(b => b.bus_number === 2)
-      if (!hasBus1 || !hasBus2) {
-        throw new Error('للتوزيع التلقائي أضف باص 1 (إناث) وباص 2 (ذكور) على الأقل')
+      if (busList.length < 2) {
+        throw new Error('أضف باصين على الأقل قبل التوزيع التلقائي (باص للإناث وباص للذكور)')
       }
 
       const groups = await fetchHotelRoomGroups(hotelName)
       if (groups.length === 0) throw new Error('لا يوجد حجاج مسكنون في هذا الفندق')
 
       const busIds = busList.map(b => b.id)
-      await supabase
+      const { error: clearErr } = await supabase
         .from('bus_assignments')
         .delete()
         .in('bus_id', busIds)
-        .eq('is_manual', false)
+      if (clearErr) throw clearErr
 
       const planned = planDistribution(groups, busList)
       if (planned.length === 0) return
@@ -546,7 +536,7 @@ export default function BusAssignmentPage() {
             توزيع الباصات
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            التوزيع التلقائي: باص 1 إناث، باص 2 ذكور، باص 3+ مختلط — مع إبقاء زملاء الغرفة معاً
+            التوزيع التلقائي يستخدم الباصات الموجودة: الأقل رقماً إناث، الثاني ذكور، الباقي للفائض — زملاء الغرفة معاً
           </p>
         </div>
         <button
