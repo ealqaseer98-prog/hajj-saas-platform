@@ -11,7 +11,18 @@ import {
   CheckCircle2,
   X,
   Undo2,
+  Printer,
 } from 'lucide-react'
+
+const LOGO_URL =
+  'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
+
+type PrintPerson = {
+  full_name_ar: string
+  cpr_number: string
+  room_number: string
+  gender: string | null
+}
 
 type ConfirmAction =
   | { type: 'dhabh'; travellerId: string; name: string }
@@ -49,6 +60,135 @@ function roomNumber(row: RitualRow): string {
   return num?.trim() || '—'
 }
 
+function escapeHtml(s: string) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function roomFromAssignments(assignments: { room: { room_number: string } | null }[] | undefined) {
+  if (!assignments?.length) return '—'
+  return assignments[0]?.room?.room_number?.trim() || '—'
+}
+
+function sortByName(list: PrintPerson[]) {
+  return [...list].sort((a, b) =>
+    (a.full_name_ar ?? '').localeCompare(b.full_name_ar ?? '', 'ar')
+  )
+}
+
+function splitByGender(list: PrintPerson[]) {
+  const sorted = sortByName(list)
+  return {
+    males: sorted.filter(p => p.gender === 'male'),
+    females: sorted.filter(p => p.gender === 'female'),
+    other: sorted.filter(p => p.gender !== 'male' && p.gender !== 'female'),
+  }
+}
+
+function genderCounts(list: PrintPerson[]) {
+  return {
+    male: list.filter(p => p.gender === 'male').length,
+    female: list.filter(p => p.gender === 'female').length,
+  }
+}
+
+async function fetchReportPeople(): Promise<{
+  awaitingRami: PrintPerson[]
+  awaitingDhabh: PrintPerson[]
+  completed: PrintPerson[]
+}> {
+  const { data, error } = await supabase
+    .from('travellers')
+    .select(
+      `
+      id,
+      full_name_ar,
+      cpr_number,
+      gender,
+      hajj_rituals(rami_completed, dhabh_completed),
+      room_assignments(room:rooms(room_number))
+    `
+    )
+    .order('full_name_ar')
+
+  if (error) throw error
+
+  const awaitingRami: PrintPerson[] = []
+  const awaitingDhabh: PrintPerson[] = []
+  const completed: PrintPerson[] = []
+
+  for (const row of data ?? []) {
+    const ritualsRaw = (row as any).hajj_rituals
+    const rituals = Array.isArray(ritualsRaw) ? ritualsRaw[0] : ritualsRaw
+    const rami = rituals?.rami_completed === true
+    const dhabh = rituals?.dhabh_completed === true
+
+    const person: PrintPerson = {
+      full_name_ar: (row as any).full_name_ar ?? '—',
+      cpr_number: (row as any).cpr_number ?? '—',
+      room_number: roomFromAssignments((row as any).room_assignments),
+      gender: (row as any).gender ?? null,
+    }
+
+    if (dhabh) completed.push(person)
+    else if (rami) awaitingDhabh.push(person)
+    else awaitingRami.push(person)
+  }
+
+  return { awaitingRami, awaitingDhabh, completed }
+}
+
+function buildGenderTable(title: string, list: PrintPerson[], startNum: number): string {
+  if (list.length === 0) {
+    return `<p class="gender-label">${escapeHtml(title)}: لا يوجد</p>`
+  }
+  const rows = list
+    .map(
+      (p, i) => `<tr>
+        <td>${startNum + i}</td>
+        <td>${escapeHtml(p.full_name_ar)}</td>
+        <td>${escapeHtml(p.cpr_number)}</td>
+        <td>${escapeHtml(p.room_number)}</td>
+      </tr>`
+    )
+    .join('')
+  return `
+    <p class="gender-label">${escapeHtml(title)} (${list.length})</p>
+    <table>
+      <thead>
+        <tr><th>#</th><th>الاسم</th><th>رقم البطاقة</th><th>رقم الغرفة</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`
+}
+
+function buildReportSection(sectionTitle: string, people: PrintPerson[]): string {
+  const { males, females, other } = splitByGender(people)
+  const counts = genderCounts(people)
+  let index = 1
+  const maleTable = buildGenderTable('ذكور', males, index)
+  index += males.length
+  const femaleTable = buildGenderTable('إناث', females, index)
+  index += females.length
+  const otherTable =
+    other.length > 0 ? buildGenderTable('غير محدد', other, index) : ''
+
+  return `
+    <section class="report-section">
+      <h2 class="section-title">${escapeHtml(sectionTitle)}</h2>
+      <p class="section-counts">
+        الإجمالي: <strong>${people.length}</strong>
+        — ذكور: <strong>${counts.male}</strong>
+        — إناث: <strong>${counts.female}</strong>
+      </p>
+      ${maleTable}
+      ${femaleTable}
+      ${otherTable}
+    </section>`
+}
+
 export default function DhabhPage() {
   const qc = useQueryClient()
   const authUser = useAuthStore(s => s.user)
@@ -56,6 +196,7 @@ export default function DhabhPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<DhabhFilter>('all')
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
+  const [printing, setPrinting] = useState(false)
 
   const { data: rows = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: ['dhabh-queue'],
@@ -174,6 +315,72 @@ export default function DhabhPage() {
     else if (confirmAction.type === 'undo-rami') undoRami.mutate(confirmAction.travellerId)
   }
 
+  const printReport = async () => {
+    setPrinting(true)
+    try {
+      const { awaitingRami, awaitingDhabh, completed } = await fetchReportPeople()
+      const date = new Date().toLocaleDateString('ar-BH', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+
+      const win = window.open('', '_blank')
+      if (!win) return
+
+      win.document.write(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>تقرير الذبح - حملة العمار 1447 هـ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
+    body { margin: 12px; direction: rtl; font-size: 13px; color: #111; }
+    .logo-wrap { text-align: center; margin-bottom: 10px; }
+    .logo { height: 72px; object-fit: contain; }
+    .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 12px; margin-bottom: 16px; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    .print-date { font-size: 12px; color: #555; margin: 0; }
+    .report-section { margin-bottom: 28px; page-break-inside: avoid; }
+    .section-title {
+      font-size: 16px; margin: 0 0 8px; padding-bottom: 6px;
+      border-bottom: 2px solid #333;
+    }
+    .section-counts { font-size: 12px; color: #444; margin: 0 0 12px; }
+    .gender-label { font-size: 13px; font-weight: bold; margin: 14px 0 6px; color: #333; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    th, td { border: 1px solid #ccc; padding: 7px 9px; text-align: right; }
+    th { background: #f0f0f0; font-weight: bold; font-size: 12px; }
+    @media print {
+      body { margin: 5mm; }
+      .report-section { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="logo-wrap">
+    <img class="logo" src="${LOGO_URL}" alt="Alammar Logo" crossorigin="anonymous" />
+  </div>
+  <div class="header">
+    <h1>تقرير الذبح - حملة العمار 1447 هـ</h1>
+    <p class="print-date">تاريخ الطباعة: ${escapeHtml(date)}</p>
+  </div>
+  ${buildReportSection('في انتظار رمي الجمرات', awaitingRami)}
+  ${buildReportSection('أتموا الرمي - في انتظار الذبح', awaitingDhabh)}
+  ${buildReportSection('تم الذبح - مكتمل', completed)}
+  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 1200); }</script>
+</body>
+</html>`)
+      win.document.close()
+    } catch {
+      alert('تعذّر تحميل بيانات التقرير')
+    } finally {
+      setPrinting(false)
+    }
+  }
+
   const confirmCopy = (action: ConfirmAction) => {
     if (action.type === 'dhabh') {
       return {
@@ -226,15 +433,26 @@ export default function DhabhPage() {
             حجاج أتمّوا رمي الجمرات — تسجيل إتمام الذبح
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-        >
-          <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
-          تحديث
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={printReport}
+            disabled={printing}
+            className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            <Printer size={16} />
+            {printing ? 'جارٍ التحميل...' : 'طباعة التقرير'}
+          </button>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
+            تحديث
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 max-w-md">
