@@ -7,6 +7,7 @@ import {
   isPathAllowedForDriver,
   canAccessRoomRequests,
   canAccessStaffPage,
+  canAccessBusAssignment,
 } from './lib/permissions'
 import Layout from './components/layout/Layout'
 import LoginPage           from './pages/LoginPage'
@@ -29,6 +30,7 @@ import CarUsagePage        from './pages/CarUsagePage'
 import NotificationsPage   from './pages/NotificationsPage'
 import RoomRequestsPage    from './pages/RoomRequestsPage'
 import StaffPage           from './pages/StaffPage'
+import BusAssignmentPage   from './pages/BusAssignmentPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 60 * 2 } }
@@ -81,13 +83,27 @@ function StaffRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function BusesRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore(s => s.user)
+  const { pathname } = useLocation()
+  if (
+    (pathname === '/buses' || pathname.startsWith('/buses/')) &&
+    !canAccessBusAssignment(user?.role)
+  ) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
+}
+
 function RoleGuardedOutlet() {
   return (
     <CoordinatorRoute>
       <DriverRoute>
         <RoomRequestsRoute>
           <StaffRoute>
-            <Layout />
+            <BusesRoute>
+              <Layout />
+            </BusesRoute>
           </StaffRoute>
         </RoomRequestsRoute>
       </DriverRoute>
@@ -121,6 +137,7 @@ export default function App() {
             <Route path="cars"                   element={<CarUsagePage />} />
             <Route path="notifications"          element={<NotificationsPage />} />
             <Route path="room-requests"          element={<RoomRequestsPage />} />
+            <Route path="buses"                    element={<BusAssignmentPage />} />
             <Route path="staff"                   element={<StaffPage />} />
           </Route>
         </Routes>

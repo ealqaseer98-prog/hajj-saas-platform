@@ -7,7 +7,7 @@ import {
   onForegroundMessage,
   type NotificationPermissionResult,
 } from '../lib/firebase'
-import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, Bell, BellOff, MessageSquare, X } from 'lucide-react'
+import { Search, Download, BedDouble, CheckCircle2, XCircle, FileText, LogOut, Bell, BellOff, MessageSquare, X, Bus } from 'lucide-react'
 
 const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
@@ -44,6 +44,7 @@ export default function PilgrimPortalPage() {
   const [messagesByRequest, setMessagesByRequest] = useState<Record<string, any[]>>({})
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<string | null>(null)
+  const [busInfo, setBusInfo] = useState<{ bus_number: number; bus_name: string | null } | null>(null)
 
   const syncNotifPermission = () => {
     if (supportsWebNotifications()) {
@@ -203,6 +204,19 @@ export default function PilgrimPortalPage() {
         .eq('cpr_number', traveller.cpr_number)
         .order('created_at', { ascending: false })
 
+      const { data: busAssign } = await supabase
+        .from('bus_assignments')
+        .select('bus:buses(bus_number, bus_name)')
+        .eq('traveller_id', traveller.id)
+        .maybeSingle()
+
+      const bus = (busAssign as any)?.bus
+      setBusInfo(
+        bus
+          ? { bus_number: bus.bus_number, bus_name: bus.bus_name ?? null }
+          : null
+      )
+
       setDocuments(docs ?? [])
       setRooms(roomsWithMates)
       setAdahiInv(invData ?? null)
@@ -279,6 +293,7 @@ export default function PilgrimPortalPage() {
     setAdahiRcp(null)
     setNotifications([])
     setRoomRequests([])
+    setBusInfo(null)
     setRequestModal(false)
     setRequestForm({ request_type: 'general', description: '' })
     setRequestSuccess(false)
@@ -545,6 +560,17 @@ export default function PilgrimPortalPage() {
                 <p className="text-xl font-bold">{traveller.full_name_ar}</p>
                 <p className="text-sm opacity-70 font-mono mt-0.5">{traveller.cpr_number}</p>
               </div>
+
+              {busInfo && (
+                <div className="bg-amber-500 rounded-2xl p-5 text-white text-center shadow-md">
+                  <Bus size={28} className="mx-auto mb-2 opacity-90" />
+                  <p className="text-sm opacity-90">باصك</p>
+                  <p className="text-2xl font-bold mt-0.5">
+                    {busInfo.bus_name ?? `باص ${busInfo.bus_number}`}
+                  </p>
+                  <p className="text-xs opacity-80 mt-1">رقم الباص: {busInfo.bus_number}</p>
+                </div>
+              )}
 
               {/* Enable notifications — browsers with Notification API */}
               {supportsWebNotifications() && notifPermission === 'default' && (
