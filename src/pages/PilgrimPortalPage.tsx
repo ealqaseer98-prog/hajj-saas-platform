@@ -677,6 +677,61 @@ export default function PilgrimPortalPage() {
                 </div>
               )}
 
+              {/* Rami & Dhabh */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  <span className="text-lg">🕋</span>
+                  رمي الجمرات والذبح
+                </h2>
+
+                {!hajjRituals?.rami_completed ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-500">
+                      بعد إتمام رمي الجمرات، اضغط الزر أدناه لتسجيل ذلك في النظام.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setRamiConfirmOpen(true)}
+                      className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-3 rounded-xl transition-colors"
+                    >
+                      أتممت رمي الجمرات ✓
+                    </button>
+                    {ritualError && (
+                      <p className="text-sm text-red-600 text-center">{ritualError}</p>
+                    )}
+                  </div>
+                ) : hajjRituals.dhabh_completed ? (
+                  <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                    <CheckCircle2 size={22} className="text-green-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-green-800">✓ تم الذبح</p>
+                      {hajjRituals.dhabh_time && (
+                        <p className="text-xs text-green-600 mt-1">
+                          {formatRitualTime(hajjRituals.dhabh_time)}
+                        </p>
+                      )}
+                      {hajjRituals.rami_time && (
+                        <p className="text-xs text-green-600/80 mt-0.5">
+                          رمي الجمرات: {formatRitualTime(hajjRituals.rami_time)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                    <Clock size={22} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-800">✓ تم رمي الجمرات — في انتظار الذبح</p>
+                      {hajjRituals.rami_time && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          {formatRitualTime(hajjRituals.rami_time)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Permit download */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -902,61 +957,6 @@ export default function PilgrimPortalPage() {
                     <span className="mr-auto font-bold text-red-600">
                       {Number(adahiInv.amount).toLocaleString('en-US')} ر.س
                     </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Rami & Dhabh */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                  <span className="text-lg">🕋</span>
-                  رمي الجمرات والذبح
-                </h2>
-
-                {!hajjRituals?.rami_completed ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-500">
-                      بعد إتمام رمي الجمرات، اضغط الزر أدناه لتسجيل ذلك في النظام.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setRamiConfirmOpen(true)}
-                      className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-3 rounded-xl transition-colors"
-                    >
-                      أتممت رمي الجمرات ✓
-                    </button>
-                    {ritualError && (
-                      <p className="text-sm text-red-600 text-center">{ritualError}</p>
-                    )}
-                  </div>
-                ) : hajjRituals.dhabh_completed ? (
-                  <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-                    <CheckCircle2 size={22} className="text-green-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-green-800">✓ تم الذبح</p>
-                      {hajjRituals.dhabh_time && (
-                        <p className="text-xs text-green-600 mt-1">
-                          {formatRitualTime(hajjRituals.dhabh_time)}
-                        </p>
-                      )}
-                      {hajjRituals.rami_time && (
-                        <p className="text-xs text-green-600/80 mt-0.5">
-                          رمي الجمرات: {formatRitualTime(hajjRituals.rami_time)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                    <Clock size={22} className="text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-amber-800">✓ تم رمي الجمرات — في انتظار الذبح</p>
-                      {hajjRituals.rami_time && (
-                        <p className="text-xs text-amber-600 mt-1">
-                          {formatRitualTime(hajjRituals.rami_time)}
-                        </p>
-                      )}
-                    </div>
                   </div>
                 )}
               </div>
