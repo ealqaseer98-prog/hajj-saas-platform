@@ -620,13 +620,19 @@ export default function PilgrimPortalPage() {
               </div>
 
               {busInfo && (
-                <div className="bg-amber-500 rounded-2xl p-5 text-white text-center shadow-md">
-                  <Bus size={28} className="mx-auto mb-2 opacity-90" />
-                  <p className="text-sm opacity-90">باصك</p>
-                  <p className="text-2xl font-bold mt-0.5">
-                    {busInfo.bus_name ?? `باص ${busInfo.bus_number}`}
-                  </p>
-                  <p className="text-xs opacity-80 mt-1">رقم الباص: {busInfo.bus_number}</p>
+                <div className="bg-amber-500 rounded-2xl p-5 text-white shadow-md">
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <Bus size={24} className="opacity-90 shrink-0" />
+                    <p className="text-sm font-medium opacity-90">باصك</p>
+                  </div>
+                  <div className="flex items-center justify-center gap-4 flex-wrap">
+                    <span className="text-4xl font-bold leading-none tabular-nums">
+                      {busInfo.bus_number}
+                    </span>
+                    <p className="text-lg font-bold leading-snug text-right min-w-0">
+                      {busInfo.bus_name?.trim() || `باص ${busInfo.bus_number}`}
+                    </p>
+                  </div>
                 </div>
               )}
 
