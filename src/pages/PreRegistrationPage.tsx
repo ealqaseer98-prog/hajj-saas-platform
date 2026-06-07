@@ -26,7 +26,7 @@ const EMPTY_FORM: PreRegForm = {
 }
 
 const HAJJ_TYPE_OPTIONS: { value: HajjType; label: string }[] = [
-  { value: 'sarooura', label: 'صرورة' },
+  { value: 'sarura', label: 'صرورة' },
   { value: 'mustahab', label: 'مستحب' },
 ]
 
@@ -36,7 +36,7 @@ const fieldClass =
   'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500'
 
 function hajjTypeLabel(type: HajjType | string | null | undefined) {
-  if (type === 'sarooura') return 'صرورة'
+  if (type === 'sarura') return 'صرورة'
   if (type === 'mustahab') return 'مستحب'
   return '—'
 }

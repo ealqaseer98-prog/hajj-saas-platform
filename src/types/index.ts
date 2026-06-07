@@ -223,7 +223,7 @@ export interface RoomAssignment {
   room?:          Room
 }
 
-export type HajjType = 'sarooura' | 'mustahab'
+export type HajjType = 'sarura' | 'mustahab'
 export type AdminReferral = 'مصطفى' | 'علي' | 'عادل' | 'الياس'
 
 export interface PreRegistration {
