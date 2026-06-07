@@ -7,6 +7,7 @@ import {
   isPathAllowedForDriver,
   canAccessRoomRequests,
   canAccessStaffPage,
+  canAccessPreRegistrationPage,
   canAccessBusAssignment,
   canAccessDhabhPage,
 } from './lib/permissions'
@@ -31,6 +32,7 @@ import CarUsagePage        from './pages/CarUsagePage'
 import NotificationsPage   from './pages/NotificationsPage'
 import RoomRequestsPage    from './pages/RoomRequestsPage'
 import StaffPage           from './pages/StaffPage'
+import PreRegistrationPage from './pages/PreRegistrationPage'
 import BusAssignmentPage   from './pages/BusAssignmentPage'
 import DhabhPage           from './pages/DhabhPage'
 
@@ -85,6 +87,18 @@ function StaffRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function PreRegistrationRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore(s => s.user)
+  const { pathname } = useLocation()
+  if (
+    (pathname === '/pre-registration' || pathname.startsWith('/pre-registration/')) &&
+    !canAccessPreRegistrationPage(user?.role)
+  ) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
+}
+
 function BusesRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore(s => s.user)
   const { pathname } = useLocation()
@@ -115,11 +129,13 @@ function RoleGuardedOutlet() {
       <DriverRoute>
         <RoomRequestsRoute>
           <StaffRoute>
-            <BusesRoute>
-              <DhabhRoute>
-                <Layout />
-              </DhabhRoute>
-            </BusesRoute>
+            <PreRegistrationRoute>
+              <BusesRoute>
+                <DhabhRoute>
+                  <Layout />
+                </DhabhRoute>
+              </BusesRoute>
+            </PreRegistrationRoute>
           </StaffRoute>
         </RoomRequestsRoute>
       </DriverRoute>
@@ -156,6 +172,7 @@ export default function App() {
             <Route path="buses"                    element={<BusAssignmentPage />} />
             <Route path="dhabh"                    element={<DhabhPage />} />
             <Route path="staff"                   element={<StaffPage />} />
+            <Route path="pre-registration"        element={<PreRegistrationPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

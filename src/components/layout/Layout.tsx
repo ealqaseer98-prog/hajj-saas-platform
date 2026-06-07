@@ -22,6 +22,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
     items: [
       { to: '/dashboard', icon: LayoutDashboard, label: 'لوحة التحكم' },
       { to: '/staff', icon: Users, label: 'الكادر' },
+      { to: '/pre-registration', icon: ClipboardList, label: 'التسجيل المسبق' },
     ],
   },
   {

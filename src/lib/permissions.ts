@@ -60,6 +60,10 @@ export function canAccessStaffPage(role: AppUser['role'] | string | null | undef
   return role === 'admin'
 }
 
+export function canAccessPreRegistrationPage(role: AppUser['role'] | string | null | undefined): boolean {
+  return role === 'admin'
+}
+
 export function canAccessBusAssignment(role: AppUser['role'] | string | null | undefined): boolean {
   return role === 'admin' || role === 'coordinator'
 }
@@ -78,6 +82,7 @@ export function filterNavItemsForRole<T extends { to: string }>(
   let filtered = items.filter(item => {
     if (item.to === '/room-requests' && !canAccessRoomRequests(role)) return false
     if (item.to === '/staff' && !canAccessStaffPage(role)) return false
+    if (item.to === '/pre-registration' && !canAccessPreRegistrationPage(role)) return false
     if (item.to === '/buses' && !canAccessBusAssignment(role)) return false
     if (item.to === '/dhabh' && !canAccessDhabhPage(role)) return false
     return true

@@ -223,6 +223,22 @@ export interface RoomAssignment {
   room?:          Room
 }
 
+export type HajjType = 'sarooura' | 'mustahab'
+export type AdminReferral = 'مصطفى' | 'علي' | 'عادل' | 'الياس'
+
+export interface PreRegistration {
+  id:                  string
+  full_name_ar:        string
+  cpr_number:          string
+  phone:               string | null
+  hajj_type:           HajjType
+  used_bahrain_permit: boolean
+  reference_name:      string | null
+  admin_referral:      AdminReferral
+  created_at:          string
+  updated_at:          string
+}
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export interface AppUser {
   id:        string

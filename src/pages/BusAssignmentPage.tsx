@@ -12,12 +12,25 @@ const fieldClass =
 const LOGO_URL =
   'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
+type BusGenderRestriction = 'mixed' | 'female' | 'male'
+
 type BusRow = {
   id: string
   bus_number: number
   bus_name: string | null
   capacity: number
   hotel_name: string
+  gender_restriction: BusGenderRestriction
+}
+
+const GENDER_RESTRICTION_OPTIONS: { value: BusGenderRestriction; label: string }[] = [
+  { value: 'mixed', label: 'الكل (مختلط)' },
+  { value: 'female', label: 'إناث فقط' },
+  { value: 'male', label: 'ذكور فقط' },
+]
+
+function restrictionLabel(r: BusGenderRestriction): string {
+  return GENDER_RESTRICTION_OPTIONS.find(o => o.value === r)?.label ?? r
 }
 
 type AssignmentRow = {
@@ -120,16 +133,18 @@ function assignGroupsToBusPool(
 }
 
 /**
- * Uses existing buses only (sorted by bus_number):
- * - Lowest number: all-female rooms (roommates together).
- * - Second lowest: all-male rooms up to capacity.
- * - Any other buses: overflow + mixed-gender rooms.
+ * Respects each bus gender_restriction:
+ * - female-only buses: all-female room groups only
+ * - male-only buses: all-male room groups only
+ * - mixed buses: any group; overflow from gendered buses goes here
  */
 function planDistribution(groups: RoomGroup[], buses: BusRow[]): PlannedAssignment[] {
   const sortedBuses = [...buses].sort((a, b) => a.bus_number - b.bus_number)
-  const femaleBus = sortedBuses[0]
-  const maleBus = sortedBuses[1]
-  const remainingBuses = sortedBuses.slice(2)
+  const restriction = (b: BusRow) => b.gender_restriction ?? 'mixed'
+
+  const femaleBuses = sortedBuses.filter(b => restriction(b) === 'female')
+  const maleBuses = sortedBuses.filter(b => restriction(b) === 'male')
+  const mixedBuses = sortedBuses.filter(b => restriction(b) === 'mixed')
 
   const femaleGroups: RoomGroup[] = []
   const maleGroups: RoomGroup[] = []
@@ -145,21 +160,20 @@ function planDistribution(groups: RoomGroup[], buses: BusRow[]): PlannedAssignme
   const counts = new Map(sortedBuses.map(b => [b.id, 0]))
   const planned: PlannedAssignment[] = []
 
-  const femaleOverflow = assignGroupsToBusPool(femaleGroups, [femaleBus], counts, planned)
-  const maleOverflow = assignGroupsToBusPool(maleGroups, [maleBus], counts, planned)
+  let femaleOverflow = assignGroupsToBusPool(femaleGroups, femaleBuses, counts, planned)
+  femaleOverflow = assignGroupsToBusPool(femaleOverflow, mixedBuses, counts, planned)
 
-  const forRemaining = [...femaleOverflow, ...maleOverflow, ...mixedRoomGroups]
-  const stillRemaining =
-    remainingBuses.length > 0
-      ? assignGroupsToBusPool(forRemaining, remainingBuses, counts, planned)
-      : forRemaining
+  let maleOverflow = assignGroupsToBusPool(maleGroups, maleBuses, counts, planned)
+  maleOverflow = assignGroupsToBusPool(maleOverflow, mixedBuses, counts, planned)
+
+  const mixedOverflow = assignGroupsToBusPool(mixedRoomGroups, mixedBuses, counts, planned)
+
+  const stillRemaining = [...femaleOverflow, ...maleOverflow, ...mixedOverflow]
 
   if (stillRemaining.length > 0) {
     const people = stillRemaining.reduce((n, g) => n + g.members.length, 0)
     throw new Error(
-      remainingBuses.length === 0
-        ? `تعذّر توزيع ${people} حاج — أضف باصاً ثالثاً أو أكثر للفائض والغرف المختلطة`
-        : `تعذّر توزيع ${stillRemaining.length} غرفة (${people} حاج) — زِد سعة الباصات المتبقية أو أضف باصات`
+      `تعذّر توزيع ${stillRemaining.length} غرفة (${people} حاج) — راجع قيود الجنس أو زِد السعة/الباصات`
     )
   }
 
@@ -304,6 +318,7 @@ export default function BusAssignmentPage() {
         bus_name: null,
         capacity: DEFAULT_BUS_CAPACITY,
         hotel_name: hotelName,
+        gender_restriction: 'mixed',
       })
       if (error) throw error
       return nextNum
@@ -363,6 +378,26 @@ export default function BusAssignmentPage() {
     },
   })
 
+  const updateGenderRestriction = useMutation({
+    mutationFn: async ({
+      busId,
+      gender_restriction,
+    }: {
+      busId: string
+      gender_restriction: BusGenderRestriction
+    }) => {
+      const { error } = await supabase
+        .from('buses')
+        .update({
+          gender_restriction,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', busId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bus-assignment-data', hotelName] }),
+  })
+
   const openEditBus = (bus: BusRow) => {
     setEditBusModal({
       busId: bus.id,
@@ -381,8 +416,8 @@ export default function BusAssignmentPage() {
         .order('bus_number')
       if (busErr) throw busErr
       const busList = (refreshed ?? []) as BusRow[]
-      if (busList.length < 2) {
-        throw new Error('أضف باصين على الأقل قبل التوزيع التلقائي (باص للإناث وباص للذكور)')
+      if (busList.length === 0) {
+        throw new Error('أضف باصاً واحداً على الأقل قبل التوزيع التلقائي')
       }
 
       const groups = await fetchHotelRoomGroups(hotelName)
