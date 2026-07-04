@@ -2,39 +2,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
-import { requestNotificationPermission } from '../lib/firebase'
 import type { AppUser } from '../types'
-
-async function registerStaffFcmToken(username: string) {
-  if (typeof window === 'undefined' || !('Notification' in window)) return
-
-  const result = await requestNotificationPermission()
-  if (result.ok === false) {
-    console.warn('[auth] staff FCM registration skipped:', result.reason)
-    return
-  }
-
-  const { error } = await supabase.from('fcm_tokens').upsert(
-    {
-      user_type: 'staff',
-      username,
-      token: result.token,
-      device_info: navigator.userAgent,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'token' }
-  )
-
-  if (error) {
-    console.error('[auth] fcm_tokens upsert error:', error)
-  }
-}
 
 interface AuthState {
   user:    AppUser | null
   loading: boolean
-  login:   (username: string, password: string) => Promise<{ error?: string }>
+  login:   (email: string, password: string) => Promise<{ error?: string }>
   logout:  () => void
+  restoreSession: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -43,33 +18,42 @@ export const useAuthStore = create<AuthState>()(
       user:    null,
       loading: false,
 
-      login: async (username, password) => {
+      login: async (email, password) => {
         set({ loading: true })
         try {
-          const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('username', username)
-            .eq('password', password)
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
+
+          if (error || !data.session) {
+            set({ loading: false })
+            return { error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' }
+          }
+
+          // campaign_id and role are stamped into the JWT by the
+          // custom_access_token_hook, available under app_metadata
+          const appMeta = data.session.user.app_metadata as {
+            campaign_id?: string
+            role?: string
+          }
+
+          // full_name lives in the profiles table, not the JWT
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', data.session.user.id)
             .single()
 
-          if (error || !data) {
-            set({ loading: false })
-            return { error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }
-          }
-
           const user: AppUser = {
-            id:        data.id,
-            username:  data.username,
-            full_name: data.full_name,
-            role:      data.role,
+            id:          data.session.user.id,
+            username:    data.session.user.email ?? email,
+            full_name:   profile?.full_name ?? data.session.user.email ?? email,
+            role:        (appMeta.role as AppUser['role']) ?? 'admin',
+            campaign_id: appMeta.campaign_id,
           }
+
           set({ user, loading: false })
-
-          if (user.role === 'admin' || user.role === 'coordinator') {
-            void registerStaffFcmToken(user.username)
-          }
-
           return {}
         } catch {
           set({ loading: false })
@@ -77,8 +61,42 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => set({ user: null }),
+      logout: () => {
+        supabase.auth.signOut()
+        set({ user: null })
+      },
+
+      // Called once on app load to re-hydrate the session if the
+      // browser still has a valid Supabase Auth session (e.g. after refresh)
+      restoreSession: async () => {
+        const { data } = await supabase.auth.getSession()
+        if (!data.session) {
+          set({ user: null })
+          return
+        }
+
+        const appMeta = data.session.user.app_metadata as {
+          campaign_id?: string
+          role?: string
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', data.session.user.id)
+          .single()
+
+        const user: AppUser = {
+          id:          data.session.user.id,
+          username:    data.session.user.email ?? '',
+          full_name:   profile?.full_name ?? data.session.user.email ?? '',
+          role:        (appMeta.role as AppUser['role']) ?? 'admin',
+          campaign_id: appMeta.campaign_id,
+        }
+
+        set({ user })
+      },
     }),
-    { name: 'hajj-auth' }
+    { name: 'hajj-auth', partialize: (state) => ({ user: state.user }) }
   )
 )

@@ -14,9 +14,6 @@ import {
   Printer,
 } from 'lucide-react'
 
-const LOGO_URL =
-  'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
-
 type PrintPerson = {
   full_name_ar: string
   cpr_number: string
@@ -333,13 +330,11 @@ export default function DhabhPage() {
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>تقرير الذبح - حملة العمار 1447 هـ</title>
+  <title>تقرير الذبح 1447 هـ</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
     body { margin: 12px; direction: rtl; font-size: 13px; color: #111; }
-    .logo-wrap { text-align: center; margin-bottom: 10px; }
-    .logo { height: 72px; object-fit: contain; }
     .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 12px; margin-bottom: 16px; }
     h1 { font-size: 20px; margin: 0 0 6px; }
     .print-date { font-size: 12px; color: #555; margin: 0; }
@@ -360,11 +355,8 @@ export default function DhabhPage() {
   </style>
 </head>
 <body>
-  <div class="logo-wrap">
-    <img class="logo" src="${LOGO_URL}" alt="Alammar Logo" crossorigin="anonymous" />
-  </div>
   <div class="header">
-    <h1>تقرير الذبح - حملة العمار 1447 هـ</h1>
+    <h1>تقرير الذبح 1447 هـ</h1>
     <p class="print-date">تاريخ الطباعة: ${escapeHtml(date)}</p>
   </div>
   ${buildReportSection('في انتظار رمي الجمرات', awaitingRami)}

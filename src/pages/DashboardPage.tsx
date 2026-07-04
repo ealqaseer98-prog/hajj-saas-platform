@@ -1,5 +1,4 @@
 // src/pages/DashboardPage.tsx
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -68,9 +67,6 @@ export default function DashboardPage() {
   const isDriverRole = user?.role === 'driver'
   const isAdmin   = user?.role === 'admin'
 
-  const [genderFilter, setGenderFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
-  const [permitFilter, setPermitFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
-
   // ── Main stats ──────────────────────────────────────────────────────────────
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -85,7 +81,7 @@ export default function DashboardPage() {
         { count: visaApproved },
         { count: visaRejected },
       ] = await Promise.all([
-        supabase.from('travellers').select('id, gender, tasreeh_source, visa_status'),
+        supabase.from('travellers').select('id, gender, visa_status'),
         supabase.from('trips').select('*', { count: 'exact', head: true }).eq('status', 'upcoming'),
         supabase.from('invoices').select('amount, amount_paid, currency').neq('status', 'cancelled'),
         supabase.from('accounts').select('balance, currency'),
@@ -98,8 +94,6 @@ export default function DashboardPage() {
       const males     = travellerData?.filter(t => t.gender === 'male').length ?? 0
       const females   = travellerData?.filter(t => t.gender === 'female').length ?? 0
       const noGender  = travellerData?.filter(t => !t.gender).length ?? 0
-      const bahrainTasreeh = travellerData?.filter(t => t.tasreeh_source === 'bahrain').length ?? 0
-      const saudiTasreeh   = travellerData?.filter(t => t.tasreeh_source === 'saudi').length ?? 0
 
       const invoices = invoiceData ?? []
       const accountRows = accounts ?? []
@@ -131,7 +125,6 @@ export default function DashboardPage() {
       return {
         travellerData: travellerData ?? [],
         total, males, females, noGender,
-        bahrainTasreeh, saudiTasreeh,
         upcomingTrips: upcomingTrips ?? 0,
         totalInvoicedBhd: sumInvoices('BHD', 'amount'),
         totalInvoicedSar: sumInvoices('SAR', 'amount'),
@@ -244,18 +237,14 @@ export default function DashboardPage() {
     expiringPassports.length +
     (isAdmin ? dueSoon.length : 0)
 
-  const genderFilteredTravellers = (stats?.travellerData ?? []).filter((t: any) =>
-    genderFilter === 'all' ? true : t.tasreeh_source === genderFilter
-  )
+  const genderFilteredTravellers = stats?.travellerData ?? []
   const genderTotal = genderFilteredTravellers.length
   const genderMales = genderFilteredTravellers.filter((t: any) => t.gender === 'male').length
   const genderFemales = genderFilteredTravellers.filter((t: any) => t.gender === 'female').length
   const genderNoGender = genderFilteredTravellers.filter((t: any) => !t.gender).length
   const malePercent = genderTotal ? Math.round((genderMales / genderTotal) * 100) : 0
   const femalePercent = genderTotal ? Math.round((genderFemales / genderTotal) * 100) : 0
-  const visaFilteredTravellers = (stats?.travellerData ?? []).filter((t: any) =>
-    permitFilter === 'all' ? true : t.tasreeh_source === permitFilter
-  )
+  const visaFilteredTravellers = stats?.travellerData ?? []
   const visaFilteredTotal = visaFilteredTravellers.length
 
   if (isDriverRole) return <DriverDashboard user={user} />
@@ -306,11 +295,9 @@ export default function DashboardPage() {
       </div>
 
       {/* ── KPI row ── */}
-      <div className={`grid grid-cols-2 md:grid-cols-3 gap-3 ${isAdmin ? 'lg:grid-cols-6' : 'lg:grid-cols-4'}`}>
+      <div className={`grid grid-cols-2 md:grid-cols-3 gap-3 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-2'}`}>
         {[
           { label: 'إجمالي الحجاج', value: stats?.total ?? 0,         icon: Users,        color: 'text-teal-600',    bg: 'bg-teal-50',    link: '/travellers' },
-          { label: 'تصاريح البحرين',   value: stats?.bahrainTasreeh ?? 0, icon: CheckCircle2, color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/travellers' },
-          { label: 'تصاريح السعودية',  value: stats?.saudiTasreeh ?? 0,   icon: CheckCircle2, color: 'text-green-600',   bg: 'bg-green-50',   link: '/travellers' },
           { label: 'رحلات قادمة',       value: stats?.upcomingTrips ?? 0, icon: Plane,         color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/trips' },
           ...(isAdmin
             ? [
@@ -354,27 +341,7 @@ export default function DashboardPage() {
 
         {/* Gender breakdown */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4 gap-2">
-            <h2 className="text-sm font-semibold text-gray-700">توزيع الحجاج حسب الجنس</h2>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {([
-                ['all', 'الكل'],
-                ['bahrain', 'البحرين'],
-                ['saudi', 'السعودية'],
-                ['other', 'أخرى'],
-              ] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  onClick={() => setGenderFilter(value)}
-                  className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-                    genderFilter === value ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">توزيع الحجاج حسب الجنس</h2>
           <div className="space-y-3">
             {/* Male bar */}
             <div>
@@ -422,27 +389,7 @@ export default function DashboardPage() {
 
         {/* Visa status breakdown */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4 gap-2">
-            <h2 className="text-sm font-semibold text-gray-700">حالة التصاريح</h2>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {([
-                ['all', 'الكل'],
-                ['bahrain', 'البحرين'],
-                ['saudi', 'السعودية'],
-                ['other', 'أخرى'],
-              ] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  onClick={() => setPermitFilter(value)}
-                  className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-                    permitFilter === value ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">حالة التصاريح</h2>
           <div className="space-y-3">
             {[
               { label: 'موافق عليه',  count: visaFilteredTravellers.filter((t: any) => t.visa_status === 'approved').length, color: 'bg-green-400', textColor: 'text-green-700', bg: 'bg-green-50', icon: <CheckCircle2 size={14} /> },

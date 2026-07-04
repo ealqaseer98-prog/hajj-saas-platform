@@ -278,7 +278,6 @@ export default function PilgrimPortalPage() {
           * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
           body { margin: 20px; direction: rtl; }
           .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
-          .header img { height: 80px; display: block; margin: 0 auto 10px auto; }
           .header h1 { font-size: 20px; margin: 0; }
           .header h2 { font-size: 16px; margin: 5px 0; color: #555; }
           .row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 14px; }
@@ -291,9 +290,7 @@ export default function PilgrimPortalPage() {
       </head>
       <body>
         <div class="header">
-          <img src="${LOGO_URL}" crossorigin="anonymous" />
-          <h1>حملة العمار للحج والعمرة</h1>
-          <h2>إيصال استلام أضحية</h2>
+          <h1>إيصال استلام أضحية</h1>
         </div>
         <div class="row"><span class="label">رقم الإيصال:</span><span class="value">${adahiRcp.receipt_number}</span></div>
         <div class="row"><span class="label">التاريخ:</span><span class="value">${adahiRcp.payment_date}</span></div>
@@ -302,7 +299,6 @@ export default function PilgrimPortalPage() {
         <div class="row"><span class="label">الوصف:</span><span class="value">${adahiInv.description}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">نقدي</span></div>
         <div class="amount">المبلغ المستلم: ${Number(adahiRcp.amount).toLocaleString('en-US')} ريال سعودي</div>
-        <div class="footer"><p>حملة العمار للحج والعمرة</p></div>
         <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 2000); }, 1500); }</script>
       </body>
       </html>

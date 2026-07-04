@@ -21,12 +21,6 @@ const PACKAGE_LABELS: Record<PackageType, string> = {
   tasreeh_only: 'فقط تصريح',
 }
 
-const TASREEH_SOURCE_LABELS: Record<'bahrain' | 'saudi', string> = {
-  bahrain: 'البحرين',
-  saudi: 'السعودية',
-  other: 'أخرى',
-}
-
 export default function VisaTrackingPage() {
   const qc       = useQueryClient()
   const navigate = useNavigate()
@@ -43,7 +37,7 @@ export default function VisaTrackingPage() {
   const { data: travellers = [], isLoading } = useQuery({
     queryKey: ['visa-travellers', filterStatus],
     queryFn: async () => {
-      const baseFields = 'id, full_name_ar, full_name_en, cpr_number, visa_status, gender, phone, tasreeh_source'
+      const baseFields = 'id, full_name_ar, full_name_en, cpr_number, visa_status, gender, phone'
       const fieldsWithPackage = `${baseFields}, package_type`
 
       let q = supabase.from('travellers').select(fieldsWithPackage).order('full_name_ar')
@@ -229,7 +223,6 @@ export default function VisaTrackingPage() {
                 )}
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الحاج</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">رقم البطاقة</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">مصدر التصريح</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الباقة</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">الحالة</th>
                 {canEdit && (
@@ -259,11 +252,6 @@ export default function VisaTrackingPage() {
                       </button>
                     </td>
                     <td className="px-4 py-3 font-mono text-gray-600">{t.cpr_number}</td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
-                        ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
-                        : '—'}
-                    </td>
                     <td className="px-4 py-3 text-gray-600">{t.package_type ? PACKAGE_LABELS[t.package_type] : '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
@@ -310,12 +298,6 @@ export default function VisaTrackingPage() {
                   <div className="mt-2 space-y-1.5 text-sm text-gray-600">
                     <p><span className="text-gray-500">رقم البطاقة: </span><span className="font-mono">{t.cpr_number}</span></p>
                     <p><span className="text-gray-500">الجنس: </span>{t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}</p>
-                    <p>
-                      <span className="text-gray-500">مصدر التصريح: </span>
-                      {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
-                        ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
-                        : '—'}
-                    </p>
                   </div>
                   {canEdit && (
                     <div className="mt-3">

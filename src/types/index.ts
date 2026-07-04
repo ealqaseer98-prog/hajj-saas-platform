@@ -241,11 +241,13 @@ export interface PreRegistration {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export interface AppUser {
-  id:        string
-  username:  string
-  full_name: string | null
-  role:      'admin' | 'agent' | 'coordinator' | 'driver'
+  id:          string
+  username:    string
+  full_name:   string | null
+  role:        'super_admin' | 'admin' | 'coordinator' | 'driver'
+  campaign_id?: string
 }
+ 
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 export type FormMode = 'create' | 'edit'

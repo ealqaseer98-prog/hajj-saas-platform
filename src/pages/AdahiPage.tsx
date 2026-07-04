@@ -38,8 +38,6 @@ async function nextAdahiExpenseNumber(): Promise<string> {
   const lastNum = last ? parseInt(last.split('-').pop() ?? '0', 10) : 0
   return `EXP-1447-${String(lastNum + 1).padStart(3, '0')}`
 }
-const LOGO_URL =
-  'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
 type ListFilter = 'all' | 'paid' | 'wakala_only' | 'complete'
 type AdahiPaymentMethod = 'cash' | 'bank_transfer'
@@ -404,8 +402,6 @@ export default function AdahiPage() {
         <style>
           * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
           body { margin: 20px; direction: rtl; }
-          .logo-wrap { text-align: center; margin-bottom: 8px; }
-          .logo { height: 80px; width: auto; object-fit: contain; }
           .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
           .header h1 { font-size: 20px; margin: 0; }
           .header h2 { font-size: 16px; margin: 5px 0; color: #555; }
@@ -413,17 +409,12 @@ export default function AdahiPage() {
           .label { color: #666; }
           .value { font-weight: bold; }
           .amount { font-size: 20px; font-weight: bold; text-align: center; border: 2px solid #000; padding: 10px; margin: 15px 0; border-radius: 8px; }
-          .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #888; border-top: 1px solid #ccc; padding-top: 10px; }
           @media print { body { margin: 5mm; } }
         </style>
       </head>
       <body>
-        <div class="logo-wrap">
-          <img class="logo" crossorigin="anonymous" src="${LOGO_URL}" alt="Alammar Logo" />
-        </div>
         <div class="header">
-          <h1>حملة العمار للحج والعمرة</h1>
-          <h2>إيصال استلام أضحية</h2>
+          <h1>إيصال استلام أضحية</h1>
         </div>
         <div class="row"><span class="label">رقم الإيصال:</span><span class="value">${inv.invoice_number}</span></div>
         <div class="row"><span class="label">التاريخ:</span><span class="value">${date}</span></div>
@@ -432,7 +423,6 @@ export default function AdahiPage() {
         <div class="row"><span class="label">الوصف:</span><span class="value">${desc}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">${pm}</span></div>
         <div class="amount">المبلغ المستلم: ${formatSar(amt)} ريال سعودي</div>
-        <div class="footer"><p>حملة العمار للحج والعمرة</p></div>
         <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 1000); }, 2000); }</script>
       </body>
       </html>
@@ -533,8 +523,7 @@ export default function AdahiPage() {
       </head>
       <body>
         <div class="header">
-          <h1>🕌 حملة العمار للحج والعمرة</h1>
-          <h3>قائمة مستلمي الوكالة — ${DEFAULT_DESC}</h3>
+          <h1>قائمة مستلمي الوكالة — ${DEFAULT_DESC}</h1>
           <h3>تاريخ الطباعة: ${date}</h3>
         </div>
         ${buildSection('الذكور', males)}

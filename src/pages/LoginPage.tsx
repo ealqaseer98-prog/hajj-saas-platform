@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('')
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
   const { login, loading }      = useAuthStore()
@@ -13,7 +13,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const result = await login(username, password)
+    const result = await login(email, password)
     if (result.error) {
       setError(result.error)
     } else {
@@ -28,7 +28,7 @@ export default function LoginPage() {
         {/* Logo / Title */}
         <div className="text-center space-y-1">
           <div className="text-4xl">🕌</div>
-          <h1 className="text-2xl font-bold text-emerald-800">حملة العمار للحج والعمرة</h1>
+          <h1 className="text-2xl font-bold text-emerald-800">نظام إدارة رحلات الحج</h1>
           <p className="text-sm text-gray-500">وكالة الحج</p>
         </div>
 
@@ -36,16 +36,17 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              اسم المستخدم
+              البريد الإلكتروني
             </label>
             <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
               required
               autoFocus
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="أدخل اسم المستخدم"
+              dir="ltr"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="admin@example.com"
             />
           </div>
 

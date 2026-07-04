@@ -39,8 +39,6 @@ function sumAmountsByCurrency(rows: any[], currency: Currency): number {
   return rows.filter((r: any) => (r.currency ?? 'BHD') === currency).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0)
 }
 
-const COMPANY_TITLE = 'حملة العمار للحج والعمرة'
-const COMPANY_LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 const PACKAGE_TYPE_LABELS: Record<string, string> = {
   barr: 'البر',
   tayaran_dammam: 'طيران - الدمام',
@@ -1042,8 +1040,6 @@ function openPrintWindow({ docType, rows }: { docType: string; rows: [string, st
         @page { size: A4; margin: 10mm; }
         * { box-sizing: border-box; font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
         body { margin: 0; padding: 24px; color: #111827; }
-        .logo-wrap { text-align: center; margin-bottom: 10px; }
-        .logo { height: 80px; width: auto; object-fit: contain; }
         .title { text-align: center; margin-bottom: 4px; font-size: 24px; font-weight: 700; }
         .subtitle { text-align: center; margin-bottom: 2px; font-size: 18px; color: #374151; }
         .date { text-align: center; margin: 0 0 14px; font-size: 13px; color: #6b7280; }
@@ -1054,10 +1050,6 @@ function openPrintWindow({ docType, rows }: { docType: string; rows: [string, st
       </style>
     </head>
     <body>
-      <div class="logo-wrap">
-        <img class="logo" crossorigin="anonymous" src="${COMPANY_LOGO_URL}" alt="Logo" />
-      </div>
-      <h1 class="title">${COMPANY_TITLE}</h1>
       <h2 class="subtitle">${escapeHtml(docType)}</h2>
       <p class="date">التاريخ: ${escapeHtml(todayText)}</p>
       <table><tbody>${tableRows}</tbody></table>
@@ -1072,7 +1064,7 @@ function openExpenseReportPrintWindow(periodLabel: string, expensesList: any[]) 
   const win = window.open('', '_blank', 'width=1100,height=800')
   if (!win) return
 
-  const reportTitle = `تقرير المصروفات - ${COMPANY_TITLE}`
+  const reportTitle = 'تقرير المصروفات'
   const sorted = [...expensesList].sort((a, b) =>
     String(a.expense_date ?? '').localeCompare(String(b.expense_date ?? ''))
   )
@@ -1113,8 +1105,6 @@ function openExpenseReportPrintWindow(periodLabel: string, expensesList: any[]) 
         @page { size: A4; margin: 10mm; }
         * { box-sizing: border-box; font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
         body { margin: 0; padding: 24px; color: #111827; }
-        .logo-wrap { text-align: center; margin-bottom: 12px; }
-        .logo { height: 80px; width: auto; object-fit: contain; }
         .title { text-align: center; margin: 0 0 8px; font-size: 22px; font-weight: 700; }
         .period { text-align: center; margin: 0 0 20px; font-size: 15px; color: #374151; font-weight: 600; }
         .report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -1124,9 +1114,6 @@ function openExpenseReportPrintWindow(periodLabel: string, expensesList: any[]) 
       </style>
     </head>
     <body>
-      <div class="logo-wrap">
-        <img class="logo" crossorigin="anonymous" src="${COMPANY_LOGO_URL}" alt="" />
-      </div>
       <h1 class="title">${escapeHtml(reportTitle)}</h1>
       <p class="period">${escapeHtml(periodLabel)}</p>
       <table class="report-table">

@@ -9,8 +9,6 @@ const DEFAULT_BUS_CAPACITY = 45
 
 const fieldClass =
   'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500'
-const LOGO_URL =
-  'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 
 type BusGenderRestriction = 'mixed' | 'female' | 'male'
 
@@ -504,10 +502,8 @@ export default function BusAssignmentPage() {
                 .join('')
         return `
         <section class="bus-page">
-          <div class="logo-wrap"><img class="logo" src="${LOGO_URL}" alt="logo" crossorigin="anonymous" /></div>
           <div class="header">
-            <h1>حملة العمار للحج والعمرة</h1>
-            <h2>قائمة ركاب باص ${bus.bus_number}${bus.bus_name ? ` — ${escapeHtml(bus.bus_name)}` : ''}</h2>
+            <h1>قائمة ركاب باص ${bus.bus_number}${bus.bus_name ? ` — ${escapeHtml(bus.bus_name)}` : ''}</h1>
             <p class="sub">${escapeHtml(hotelName)} — ${date}</p>
           </div>
           <p class="meta">السعة: <strong>${bus.capacity}</strong> — العدد: <strong>${list.length}</strong></p>
@@ -530,12 +526,9 @@ export default function BusAssignmentPage() {
   <style>
     * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
     body { margin: 12px; direction: rtl; font-size: 13px; }
-    .logo-wrap { text-align: center; margin-bottom: 8px; }
-    .logo { height: 72px; object-fit: contain; }
     .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 12px; }
     h1 { font-size: 18px; margin: 0; }
-    h2 { font-size: 15px; margin: 6px 0; color: #333; }
-    .sub { font-size: 12px; color: #666; margin: 0; }
+    .sub { font-size: 12px; color: #666; margin: 6px 0 0; }
     .meta { margin-bottom: 10px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #ccc; padding: 8px; text-align: right; }

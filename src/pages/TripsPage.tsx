@@ -169,7 +169,6 @@ export default function TripsPage() {
                     <option value="barr">البر</option>
                     <option value="tayaran_dammam">طيران - الدمام</option>
                     <option value="tayaran_bahrain">طيران - البحرين</option>
-                    <option value="tasreeh_only">فقط تصريح</option>
                   </select>
                 </div>
                 <div>

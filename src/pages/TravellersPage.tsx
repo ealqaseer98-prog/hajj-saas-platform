@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import { canManageTravellers } from '../lib/permissions'
 import { Search, Plus, Edit2, Trash2, Eye, UserCheck, AlertCircle } from 'lucide-react'
-import type { Traveller, VisaStatus, PackageType } from '../types'
+import type { Traveller, VisaStatus, PackageType, Gender } from '../types'
 
 const VISA_LABELS: Record<VisaStatus, { label: string; className: string }> = {
   pending:  { label: 'في الانتظار', className: 'bg-yellow-100 text-yellow-800' },
@@ -21,16 +21,46 @@ const PACKAGE_LABELS: Record<PackageType, string> = {
   tasreeh_only: 'فقط تصريح',
 }
 
-const TASREEH_SOURCE_LABELS: Record<'bahrain' | 'saudi' | 'other', string> = {
-  bahrain: 'البحرين',
-  saudi: 'السعودية',
-  other: 'أخرى',
+function visaStatusCfg(status: string | null | undefined) {
+  return VISA_LABELS[status as VisaStatus] ?? { className: '', label: status ?? '—' }
 }
 
-const GROUP_NAME_LABELS: Record<'alammar' | 'sarhan' | 'other', string> = {
-  alammar: 'العمار',
-  sarhan: 'السرحان',
-  other: 'أخرى',
+function packageLabel(type: string | null | undefined) {
+  return type ? (PACKAGE_LABELS[type as PackageType] ?? type) : '—'
+}
+
+function genderCfg(gender: string | null | undefined) {
+  if (gender === 'male' || gender === 'ذكر') return { label: 'ذكر', className: 'bg-blue-50 text-blue-700' }
+  if (gender === 'female' || gender === 'أنثى') return { label: 'أنثى', className: 'bg-pink-50 text-pink-700' }
+  return { label: '—', className: 'text-gray-400' }
+}
+
+function normalizeGender(gender: string | null | undefined): Gender | null {
+  if (gender === 'male' || gender === 'ذكر') return 'male'
+  if (gender === 'female' || gender === 'أنثى') return 'female'
+  return null
+}
+
+function buildSavePayload(t: Partial<Traveller>) {
+  return {
+    cpr_number: t.cpr_number,
+    permit_number: t.permit_number ?? null,
+    full_name_ar: t.full_name_ar,
+    full_name_en: t.full_name_en ?? '',
+    group_name: t.group_name ?? null,
+    tasreeh_source: 'bahrain' as const,
+    package_type: t.package_type ?? null,
+    gender: normalizeGender(t.gender),
+    phone: t.phone ?? null,
+    email: t.email ?? null,
+    passport_number: t.passport_number ?? null,
+    passport_issue_date: t.passport_issue_date ?? null,
+    passport_expiry: t.passport_expiry ?? null,
+    nationality: t.nationality ?? 'بحريني',
+    date_of_birth: t.date_of_birth ?? null,
+    visa_status: t.visa_status ?? 'pending',
+    notes: t.notes ?? null,
+  }
 }
 
 type TravellerColumnKey =
@@ -41,27 +71,23 @@ type TravellerColumnKey =
   | 'phone'
   | 'passport_number'
   | 'package_type'
-  | 'group_name'
-  | 'tasreeh_source'
   | 'visa_status'
 
 const TRAVELLER_COLUMNS: { key: TravellerColumnKey; label: string }[] = [
   { key: 'full_name_ar', label: 'الاسم بالعربية' },
+  { key: 'gender', label: 'الجنس' },
   { key: 'full_name_en', label: 'الاسم بالإنجليزية' },
   { key: 'cpr_number', label: 'رقم البطاقة' },
-  { key: 'gender', label: 'الجنس' },
   { key: 'phone', label: 'الهاتف' },
   { key: 'passport_number', label: 'جواز السفر' },
   { key: 'package_type', label: 'الباقة' },
-  { key: 'group_name', label: 'اسم المجموعة' },
-  { key: 'tasreeh_source', label: 'مصدر التصريح' },
   { key: 'visa_status', label: 'حالة التصريح' },
 ]
 
 const EMPTY: Partial<Traveller> = {
   cpr_number: '', full_name_ar: '', full_name_en: '',
   phone: '', email: '', passport_number: '',
-  nationality: 'بحريني', visa_status: 'pending', package_type: null, group_name: null, tasreeh_source: null, gender: null, notes: '',
+  nationality: 'بحريني', visa_status: 'pending', package_type: null, group_name: null, tasreeh_source: 'bahrain', gender: null, notes: '',
 }
 
 export default function TravellersPage() {
@@ -73,8 +99,6 @@ export default function TravellersPage() {
   const [selected, setSelected]       = useState<Partial<Traveller>>(EMPTY)
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all')
   const [packageFilter, setPackageFilter] = useState<'all' | PackageType>('all')
-  const [groupFilter, setGroupFilter] = useState<'all' | 'alammar' | 'sarhan' | 'other'>('all')
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'bahrain' | 'saudi' | 'other'>('all')
   const [visaFilter, setVisaFilter] = useState<'all' | VisaStatus>('all')
   const [sortBy, setSortBy] = useState<'name' | 'cpr' | 'gender' | 'package'>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
@@ -87,8 +111,6 @@ export default function TravellersPage() {
     phone: false,
     passport_number: false,
     package_type: true,
-    group_name: true,
-    tasreeh_source: true,
     visa_status: true,
   })
 
@@ -109,8 +131,6 @@ export default function TravellersPage() {
   const filtered = travellers
     .filter(t => (genderFilter === 'all' ? true : t.gender === genderFilter))
     .filter(t => (packageFilter === 'all' ? true : t.package_type === packageFilter))
-    .filter(t => (groupFilter === 'all' ? true : t.group_name === groupFilter))
-    .filter(t => (sourceFilter === 'all' ? true : t.tasreeh_source === sourceFilter))
     .filter(t => (visaFilter === 'all' ? true : t.visa_status === visaFilter))
     .sort((a, b) => {
       const dir = sortDirection === 'asc' ? 1 : -1
@@ -120,15 +140,13 @@ export default function TravellersPage() {
         const gv = (g: Traveller['gender']) => (g === 'male' ? 1 : g === 'female' ? 2 : 3)
         return (gv(a.gender) - gv(b.gender)) * dir
       }
-      const pl = (p: Traveller['package_type']) => (p ? PACKAGE_LABELS[p] : '')
+      const pl = (p: Traveller['package_type']) => packageLabel(p)
       return pl(a.package_type).localeCompare(pl(b.package_type), 'ar') * dir
     })
 
   const hasActiveFilters =
     genderFilter !== 'all' ||
     packageFilter !== 'all' ||
-    groupFilter !== 'all' ||
-    sourceFilter !== 'all' ||
     visaFilter !== 'all' ||
     sortBy !== 'name' ||
     sortDirection !== 'asc'
@@ -138,11 +156,12 @@ export default function TravellersPage() {
 
   const save = useMutation({
     mutationFn: async (t: Partial<Traveller>) => {
+      const payload = buildSavePayload(t)
       if (modal === 'add') {
-        await supabase.from('travellers').insert(t).throwOnError()
+        await supabase.from('travellers').insert(payload).throwOnError()
       } else {
-        const { id, created_at, updated_at, ...rest } = t as Traveller
-        await supabase.from('travellers').update(rest).eq('id', id).throwOnError()
+        const { id } = t as Traveller
+        await supabase.from('travellers').update(payload).eq('id', id).throwOnError()
       }
     },
     onSuccess: () => {
@@ -159,28 +178,26 @@ export default function TravellersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['travellers'] }),
   })
 
-  const openEdit = (t: Traveller) => { setSelected(t); setModal('edit') }
-  const activeColumns = TRAVELLER_COLUMNS.filter(c => selectedColumns[c.key])
+  const openEdit = (t: Traveller) => {
+    setSelected({
+      ...t,
+      gender: normalizeGender(t.gender),
+    })
+    setModal('edit')
+  }
+  const activeColumns = TRAVELLER_COLUMNS.filter(
+    c => c.key === 'gender' || selectedColumns[c.key]
+  )
 
   const getColumnValue = (t: Traveller, key: TravellerColumnKey) => {
     if (key === 'full_name_ar') return t.full_name_ar ?? '—'
     if (key === 'full_name_en') return t.full_name_en ?? '—'
     if (key === 'cpr_number') return t.cpr_number ?? '—'
-    if (key === 'gender') return t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'
+    if (key === 'gender') return genderCfg(t.gender).label
     if (key === 'phone') return t.phone ?? '—'
     if (key === 'passport_number') return t.passport_number ?? '—'
-    if (key === 'package_type') return t.package_type ? PACKAGE_LABELS[t.package_type] : '—'
-    if (key === 'group_name') {
-      return t.group_name === 'alammar' || t.group_name === 'sarhan' || t.group_name === 'other'
-        ? GROUP_NAME_LABELS[t.group_name]
-        : '—'
-    }
-    if (key === 'tasreeh_source') {
-      return t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
-        ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
-        : '—'
-    }
-    if (key === 'visa_status') return VISA_LABELS[t.visa_status].label
+    if (key === 'package_type') return packageLabel(t.package_type)
+    if (key === 'visa_status') return visaStatusCfg(t.visa_status).label
     return '—'
   }
 
@@ -249,7 +266,7 @@ export default function TravellersPage() {
       </head>
       <body>
         <div class="print-wrap">
-          <h1 class="title">قائمة الحجاج - حملة العمار للحج والعمرة</h1>
+          <h1 class="title">قائمة الحجاج</h1>
           <p class="date">التاريخ: ${escapeHtml(today)}</p>
           <table>
             <thead><tr>${tableHead}</tr></thead>
@@ -307,7 +324,7 @@ export default function TravellersPage() {
           {showColumnPicker && (
             <div className="absolute left-0 top-12 z-20 bg-white border border-gray-200 shadow-lg rounded-xl p-3 w-64 space-y-2">
               <p className="text-xs font-semibold text-gray-600 mb-1">إظهار/إخفاء الأعمدة</p>
-              {TRAVELLER_COLUMNS.map(col => (
+              {TRAVELLER_COLUMNS.filter(col => col.key !== 'gender').map(col => (
                 <label key={col.key} className="flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="checkbox"
@@ -346,18 +363,6 @@ export default function TravellersPage() {
             <option value="tayaran_bahrain">الباقة: طيران - البحرين</option>
             <option value="tasreeh_only">الباقة: فقط تصريح</option>
           </select>
-          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={groupFilter} onChange={e => setGroupFilter(e.target.value as 'all' | 'alammar' | 'sarhan' | 'other')}>
-            <option value="all">اسم المجموعة: الكل</option>
-            <option value="alammar">اسم المجموعة: العمار</option>
-            <option value="sarhan">اسم المجموعة: السرحان</option>
-            <option value="other">اسم المجموعة: أخرى</option>
-          </select>
-          <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={sourceFilter} onChange={e => setSourceFilter(e.target.value as 'all' | 'bahrain' | 'saudi' | 'other')}>
-            <option value="all">مصدر التصريح: الكل</option>
-            <option value="bahrain">مصدر التصريح: البحرين</option>
-            <option value="saudi">مصدر التصريح: السعودية</option>
-            <option value="other">مصدر التصريح: أخرى</option>
-          </select>
           <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={visaFilter} onChange={e => setVisaFilter(e.target.value as 'all' | VisaStatus)}>
             <option value="all">حالة التصريح: الكل</option>
             <option value="pending">حالة التصريح: في الانتظار</option>
@@ -381,8 +386,6 @@ export default function TravellersPage() {
               onClick={() => {
                 setGenderFilter('all')
                 setPackageFilter('all')
-                setGroupFilter('all')
-                setSourceFilter('all')
                 setVisaFilter('all')
                 setSortBy('name')
                 setSortDirection('asc')
@@ -415,18 +418,21 @@ export default function TravellersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(t => (
+              {filtered.map(t => {
+                const visaCfg = visaStatusCfg(t.visa_status)
+                const genderBadge = genderCfg(t.gender)
+                return (
                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                   {activeColumns.map(col => (
                     <td key={col.key} className="px-4 py-3 text-gray-600">
                       {col.key === 'visa_status' ? (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISA_LABELS[t.visa_status].className}`}>
-                          {VISA_LABELS[t.visa_status].label}
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${visaCfg.className}`}>
+                          {visaCfg.label}
                         </span>
                       ) : col.key === 'gender' ? (
-                        t.gender === 'male' ? <span className="text-blue-600 text-xs font-medium">👨 ذكر</span>
-                        : t.gender === 'female' ? <span className="text-pink-600 text-xs font-medium">🧕 أنثى</span>
-                        : <span className="text-gray-300 text-xs">—</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${genderBadge.className}`}>
+                          {genderBadge.label}
+                        </span>
                       ) : (
                         <span className={col.key === 'cpr_number' || col.key === 'phone' || col.key === 'passport_number' ? 'font-mono' : ''}>
                           {getColumnValue(t, col.key)}
@@ -452,35 +458,26 @@ export default function TravellersPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
           <div className="md:hidden p-3 space-y-3">
-            {filtered.map(t => (
+            {filtered.map(t => {
+              const visaCfg = visaStatusCfg(t.visa_status)
+              return (
               <div key={t.id} className="border border-gray-100 rounded-xl p-3 bg-white shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold text-gray-800">{t.full_name_ar}</h3>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISA_LABELS[t.visa_status].className}`}>
-                    {VISA_LABELS[t.visa_status].label}
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${visaCfg.className}`}>
+                    {visaCfg.label}
                   </span>
                 </div>
                 <div className="mt-2 space-y-1.5 text-sm text-gray-600">
                   <p><span className="text-gray-500">رقم البطاقة: </span><span className="font-mono">{t.cpr_number}</span></p>
                   <p>
                     <span className="text-gray-500">الجنس: </span>
-                    {t.gender === 'male' ? 'ذكر' : t.gender === 'female' ? 'أنثى' : '—'}
-                  </p>
-                  <p>
-                    <span className="text-gray-500">اسم المجموعة: </span>
-                    {t.group_name === 'alammar' || t.group_name === 'sarhan' || t.group_name === 'other'
-                      ? GROUP_NAME_LABELS[t.group_name]
-                      : '—'}
-                  </p>
-                  <p>
-                    <span className="text-gray-500">مصدر التصريح: </span>
-                    {t.tasreeh_source === 'bahrain' || t.tasreeh_source === 'saudi'
-                      ? TASREEH_SOURCE_LABELS[t.tasreeh_source]
-                      : '—'}
+                    {genderCfg(t.gender).label}
                   </p>
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
@@ -499,7 +496,8 @@ export default function TravellersPage() {
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
           </>
         )}
@@ -529,6 +527,11 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       onChange({ ...data, [field]: e.target.value })
 
+  const setGender = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value
+    onChange({ ...data, gender: value === '' ? null : (value as Gender) })
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" dir="rtl">
@@ -550,7 +553,7 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
             <input className={ic} value={data.permit_number ?? ''} onChange={f('permit_number')} dir="ltr" />
           </Field>
           <Field label="الجنس *" required>
-            <select className={ic} value={data.gender ?? ''} onChange={f('gender')}>
+            <select className={ic} value={data.gender ?? ''} onChange={setGender}>
               <option value="">— اختر —</option>
               <option value="male">ذكر</option>
               <option value="female">أنثى</option>
@@ -577,28 +580,12 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
           <Field label="الجنسية">
             <input className={ic} value={data.nationality ?? ''} onChange={f('nationality')} />
           </Field>
-          <Field label="اسم المجموعة">
-            <select className={ic} value={data.group_name ?? ''} onChange={f('group_name')}>
-              <option value="">— اختر —</option>
-              <option value="alammar">العمار</option>
-              <option value="sarhan">السرحان</option>
-              <option value="other">أخرى</option>
-            </select>
-          </Field>
-          <Field label="مصدر التصريح">
-            <select className={ic} value={data.tasreeh_source ?? ''} onChange={f('tasreeh_source')}>
-              <option value="">— اختر —</option>
-              <option value="bahrain">البحرين</option>
-              <option value="saudi">السعودية</option><option value="other">أخرى</option>
-            </select>
-          </Field>
           <Field label="الباقة">
             <select className={ic} value={data.package_type ?? ''} onChange={f('package_type')}>
               <option value="">— اختر —</option>
               <option value="barr">البر</option>
               <option value="tayaran_dammam">طيران - الدمام</option>
               <option value="tayaran_bahrain">طيران - البحرين</option>
-              <option value="tasreeh_only">فقط تصريح</option>
             </select>
           </Field>
           <Field label="حالة التصريح">
@@ -622,7 +609,7 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
 
         <div className="flex gap-3 pt-2">
           <button onClick={onSave}
-            disabled={saving || !data.cpr_number || !data.full_name_ar}
+            disabled={saving || !data.cpr_number || !data.full_name_ar || !data.gender}
             className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
             {saving ? 'جارٍ الحفظ...' : 'حفظ'}
           </button>

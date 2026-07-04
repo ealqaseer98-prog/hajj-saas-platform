@@ -209,7 +209,7 @@ export default function PreRegistrationPage() {
       </head>
       <body>
         <div class="print-wrap">
-          <h1 class="title">قائمة التسجيل المسبق - حملة العمار للحج والعمرة</h1>
+          <h1 class="title">قائمة التسجيل المسبق</h1>
           <p class="meta">التاريخ: ${escapeHtml(today)} — العدد الإجمالي: ${entries.length}</p>
           <table>
             <thead><tr>${tableHead}</tr></thead>

@@ -121,14 +121,6 @@ export default function TripManifestPage() {
 
           {/* Header */}
           <div className="p-8 border-b border-gray-100 print:border-b-2 print:border-black">
-            <div className="text-center mb-4">
-              <img
-                src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png"
-                alt="Company Logo"
-                crossOrigin="anonymous"
-                style={{ height: '80px', width: 'auto', margin: '0 auto' }}
-              />
-            </div>
             <div className="flex items-start justify-between">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">كشف رحلة الحج</h1>

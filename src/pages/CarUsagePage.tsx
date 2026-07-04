@@ -3,8 +3,6 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { Car, LogIn, LogOut, Camera, FileText, Plus, Printer, Search } from 'lucide-react'
-
-const LOGO_URL = 'https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png'
 const BUCKET   = 'car-photos'
 
 type Tab = 'active' | 'history' | 'cars'
@@ -320,8 +318,7 @@ function HistoryTab({ history, search, setSearch }: any) {
       <style>
         * { font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
         body { margin: 15px; direction: rtl; font-size: 12px; }
-        .header { text-align: center; margin-bottom: 15px; }
-        img { height: 60px; display: block; margin: 0 auto 8px; }
+        .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 10px; }
         h1 { font-size: 16px; margin: 0; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #ccc; padding: 5px 8px; text-align: right; }
@@ -331,7 +328,6 @@ function HistoryTab({ history, search, setSearch }: any) {
       </style></head>
       <body>
         <div class="header">
-          <img src="${LOGO_URL}" crossorigin="anonymous" />
           <h1>تقرير استخدام السيارات</h1>
           <p>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-BH')}</p>
         </div>

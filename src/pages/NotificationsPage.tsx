@@ -110,7 +110,7 @@ export default function NotificationsPage() {
       {/* Info banner */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
         <p className="font-medium mb-1">كيف يعمل النظام؟</p>
-        <p>عندما يفتح الحاج بوابته على <strong>alammar.app/pilgrim</strong> ويوافق على الإشعارات، يتم تسجيله تلقائياً. يمكنك بعد ذلك إرسال إشعارات تصلهم مباشرة على هواتفهم.</p>
+        <p>عندما يفتح الحاج بوابة الحاج الخاصة بحملتكم ويوافق على الإشعارات، يتم تسجيله تلقائياً. يمكنك بعد ذلك إرسال إشعارات تصلهم مباشرة على هواتفهم.</p>
       </div>
 
       {isLoading ? (

@@ -272,8 +272,6 @@ export default function RoomsPage() {
         <style>
           * { box-sizing: border-box; }
           body { margin: 20px; direction: rtl; font-family: 'Noto Naskh Arabic', Arial, sans-serif; color: #1a1a1a; }
-          .logo-wrap { text-align: center; margin-bottom: 12px; }
-          .logo { height: 72px; width: auto; object-fit: contain; }
           h1 { font-size: 1.25rem; text-align: center; margin: 0 0 16px; font-weight: 700; border-bottom: 2px solid #111; padding-bottom: 10px; }
           .room-block { margin-bottom: 18px; page-break-inside: avoid; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
           .room-head { background: #f5f5f5; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 14px; }
@@ -286,13 +284,10 @@ export default function RoomsPage() {
           .occ.empty { color: #999; font-style: italic; justify-content: flex-start; border: none; }
           .summary { margin-top: 22px; padding: 12px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 14px; }
           .summary p { margin: 4px 0; }
-          @media print { body { margin: 8mm; } .logo { height: 64px; } }
+          @media print { body { margin: 8mm; } }
         </style>
       </head>
       <body>
-        <div class="logo-wrap">
-          <img class="logo" crossorigin="anonymous" src="https://oogtpuqoggkajzqodtxo.supabase.co/storage/v1/object/public/public-assets/Screenshot%20-%20Edited.png" alt="" />
-        </div>
         <h1>${escHtml(title)}</h1>
         ${roomBlocks || '<p class="occ empty">لا توجد غرف</p>'}
         <div class="summary">

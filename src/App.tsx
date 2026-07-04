@@ -1,4 +1,5 @@
 // src/App.tsx
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
@@ -144,6 +145,23 @@ function RoleGuardedOutlet() {
 }
 
 export default function App() {
+  const restoreSession = useAuthStore(s => s.restoreSession)
+  const [checking, setChecking] = useState(true)
+
+  // On first load, ask Supabase if there's still a valid session
+  // (e.g. user refreshed the page or came back after closing the tab)
+  useEffect(() => {
+    restoreSession().finally(() => setChecking(false))
+  }, [restoreSession])
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-emerald-50" dir="rtl">
+        <p className="text-gray-400 text-sm">جارٍ التحميل...</p>
+      </div>
+    )
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
