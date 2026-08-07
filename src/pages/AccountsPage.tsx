@@ -39,6 +39,7 @@ export default function AccountsPage() {
       const balance = Number(a.balance ?? opening)
       await supabase.from('accounts').insert({
         ...a,
+        currency: 'BHD',
         opening_balance: opening,
         balance,
       }).throwOnError()
@@ -178,9 +179,6 @@ export default function AccountsPage() {
           <LabelSelect label="نوع الحساب" value={newAcc.account_type ?? 'bank'}
             onChange={v => setNewAcc(s => ({ ...s, account_type: v as any }))}
             options={[{ value: 'bank', label: 'بنك' }, { value: 'cash', label: 'صندوق' }]} />
-          <LabelSelect label="العملة" value={newAcc.currency ?? 'BHD'}
-            onChange={v => setNewAcc(s => ({ ...s, currency: v }))}
-            options={[{ value: 'BHD', label: 'BHD' }, { value: 'SAR', label: 'SAR' }]} />
           <LabelInput label="الرصيد الافتتاحي" type="number" value={String(newAcc.balance ?? 0)}
             onChange={v => setNewAcc(s => ({ ...s, balance: +v }))} />
         </SimpleModal>

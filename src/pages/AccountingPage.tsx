@@ -112,6 +112,7 @@ function InvoicesTab() {
           .from('invoices')
           .update({
             ...data,
+            currency: 'BHD',
             traveller_id: data.traveller_id || null,
             trip_id: data.trip_id || null,
             account_id: data.account_id || null,
@@ -126,6 +127,7 @@ function InvoicesTab() {
       await supabase.from('invoices').insert({
         ...data,
         invoice_number: num,
+        currency: 'BHD',
         traveller_id: data.traveller_id || null,
         trip_id: data.trip_id || null,
         account_id: data.account_id || null,
@@ -147,7 +149,7 @@ function InvoicesTab() {
   })
 
   const invTotals = invoiceTotalsByCurrency(invoices)
-  const selectedCurrency = (sel.currency ?? 'BHD') as Currency
+  const selectedCurrency: Currency = 'BHD'
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
   const searchTerm = search.trim().toLowerCase()
   const filteredInvoices = invoices.filter((i: any) => {
@@ -353,9 +355,6 @@ function InvoicesTab() {
           <Select label="الرحلة" value={sel.trip_id ?? ''}
             onChange={v => setSel(s => ({ ...s, trip_id: v }))}
             options={trips.map((t: Trip) => ({ value: t.id, label: t.trip_name }))} />
-          <Select label="العملة *" value={selectedCurrency}
-            onChange={v => setSel(s => ({ ...s, currency: v as Currency, account_id: '' }))}
-            options={[{ value: 'BHD', label: 'BHD' }, { value: 'SAR', label: 'SAR' }]} />
           <Select label="الحساب" value={sel.account_id ?? ''}
             onChange={v => setSel(s => ({ ...s, account_id: v }))}
             options={filteredAccounts.map((a: Account) => ({ value: a.id, label: a.name }))} />
@@ -413,7 +412,7 @@ function ReceiptsTab() {
     enabled: modal,
   })
   const { data: accounts = [] }   = useQuery({ queryKey: ['accounts-list'], queryFn: fetchAccounts })
-  const selectedCurrency = (sel.currency ?? 'BHD') as Currency
+  const selectedCurrency: Currency = 'BHD'
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
   const searchTerm = search.trim().toLowerCase()
   const filteredReceipts = searchTerm
@@ -446,6 +445,7 @@ function ReceiptsTab() {
       if (receipt?.id) {
         await supabase.from('receipts').update({
           ...data,
+          currency: 'BHD',
           traveller_id: data.traveller_id || null,
           invoice_id: data.invoice_id || null,
           account_id: data.account_id || null,
@@ -453,9 +453,10 @@ function ReceiptsTab() {
         return
       }
       const num = await nextNumber('receipts', 'receipt_number', 'RCP')
-      await supabase.from('receipts').insert({ 
-        ...data, 
+      await supabase.from('receipts').insert({
+        ...data,
         receipt_number: num,
+        currency: 'BHD',
         traveller_id: data.traveller_id || null,
         invoice_id:   data.invoice_id   || null,
         account_id:   data.account_id   || null,
@@ -643,9 +644,6 @@ function ReceiptsTab() {
               </div>
             )
           })()}
-          <Select label="العملة *" value={selectedCurrency}
-            onChange={v => setSel(s => ({ ...s, currency: v as Currency, account_id: '' }))}
-            options={[{ value: 'BHD', label: 'BHD' }, { value: 'SAR', label: 'SAR' }]} />
           <Select label="الحساب *" value={sel.account_id ?? ''}
             onChange={v => setSel(s => ({ ...s, account_id: v }))}
             options={filteredAccounts.map((a: Account) => ({ value: a.id, label: a.name }))} />
@@ -692,7 +690,7 @@ function ExpensesTab() {
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts-list'], queryFn: fetchAccounts })
   const { data: trips = [] }    = useQuery({ queryKey: ['trips-list'],    queryFn: fetchTrips })
   const { data: travellers = [] } = useQuery({ queryKey: ['travellers-list'], queryFn: fetchTravellers })
-  const selectedCurrency = (sel.currency ?? 'BHD') as Currency
+  const selectedCurrency: Currency = 'BHD'
   const filteredAccounts = accounts.filter((a: Account) => a.currency === selectedCurrency)
   const searchTerm = search.trim().toLowerCase()
   const filteredExpenses = searchTerm
@@ -714,6 +712,7 @@ function ExpensesTab() {
           .from('expenses')
           .update({
             ...data,
+            currency: 'BHD',
             account_id: data.account_id || null,
             traveller_id: data.traveller_id || null,
             trip_id: data.trip_id || null,
@@ -723,7 +722,7 @@ function ExpensesTab() {
         return
       }
       const num = await nextNumber('expenses', 'expense_number', 'EXP')
-      await supabase.from('expenses').insert({ ...data, expense_number: num }).throwOnError()
+      await supabase.from('expenses').insert({ ...data, expense_number: num, currency: 'BHD' }).throwOnError()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses', 'accounts-list'] })
@@ -910,9 +909,6 @@ function ExpensesTab() {
               </div>
             )}
           </div>
-          <Select label="العملة *" value={selectedCurrency}
-            onChange={v => setSel(s => ({ ...s, currency: v as Currency, account_id: '' }))}
-            options={[{ value: 'BHD', label: 'BHD' }, { value: 'SAR', label: 'SAR' }]} />
           <Select label="الحساب *" value={sel.account_id ?? ''}
             onChange={v => setSel(s => ({ ...s, account_id: v }))}
             options={filteredAccounts.map((a: Account) => ({ value: a.id, label: a.name }))} />

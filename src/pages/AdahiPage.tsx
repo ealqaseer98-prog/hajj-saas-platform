@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { Search, FileText, Printer } from 'lucide-react'
 
-const SAR_CASH_ACCOUNT_ID = '18acae25-9a14-40ee-acd1-9f40f87cc142'
 const DEFAULT_AMOUNT      = 750
 const DEFAULT_DESC        = 'أضحية موسم الحج 1447 هـ'
 const STAFF_EXPENSE_DESC  = 'أضحية كادر - موسم الحج 1447 هـ'
@@ -71,6 +70,32 @@ export default function AdahiPage() {
     paymentMethod: AdahiPaymentMethod
     recordAsExpense: boolean
   } | null>(null)
+
+  // Resolve this campaign's BHD cash account dynamically — RLS already
+  // scopes `accounts` to the campaign, so no explicit campaign_id filter needed.
+  const { data: cashAccountId = null, isLoading: cashAccountLoading } = useQuery({
+    queryKey: ['adahi-cash-account'],
+    queryFn: async () => {
+      const { data: cashTyped } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('currency', 'BHD')
+        .eq('account_type', 'cash')
+        .limit(1)
+        .maybeSingle()
+      if (cashTyped?.id) return cashTyped.id as string
+
+      const { data: anyBhd } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('currency', 'BHD')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      return (anyBhd?.id as string) ?? null
+    },
+  })
 
   const { data: people = [], isLoading } = useQuery({
     queryKey: ['adahi-people'],
@@ -139,15 +164,16 @@ export default function AdahiPage() {
   })
 
   const { data: adahiExpenses = [] } = useQuery({
-    queryKey: ['adahi-staff-expenses'],
+    queryKey: ['adahi-staff-expenses', cashAccountId],
     queryFn: async () => {
       const { data } = await supabase
         .from('expenses')
         .select('id, amount, expense_number, description, notes, expense_date')
-        .eq('account_id', SAR_CASH_ACCOUNT_ID)
+        .eq('account_id', cashAccountId)
         .or(`description.ilike.%أضحية كادر%,description.ilike.%أضحية%`)
       return (data ?? []) as any[]
     },
+    enabled: !!cashAccountId,
   })
 
   const invoiceMap: Record<string, any> = {}
@@ -196,14 +222,17 @@ export default function AdahiPage() {
     }) => {
       const { person, amount, description, paymentMethod, recordAsExpense } = payload
       if (!Number.isFinite(amount) || amount <= 0) throw new Error('مبلغ غير صالح')
+      if (!cashAccountId) {
+        throw new Error('لا يوجد صندوق نقدي (BHD) لهذه الحملة. أنشئ حساب صندوق بالدينار البحريني من صفحة الحسابات أولاً.')
+      }
 
       if (person.type === 'staff' || recordAsExpense) {
         const expNum = await nextAdahiExpenseNumber()
         const { error } = await supabase.from('expenses').insert({
           expense_number: expNum,
-          account_id: SAR_CASH_ACCOUNT_ID,
+          account_id: cashAccountId,
           amount,
-          currency: 'SAR',
+          currency: 'BHD',
           description: person.type === 'staff' ? STAFF_EXPENSE_DESC : description,
           expense_date: new Date().toISOString().slice(0, 10),
           notes:
@@ -233,9 +262,9 @@ export default function AdahiPage() {
         .insert({
           invoice_number: invNum,
           traveller_id: person.id,
-          account_id: SAR_CASH_ACCOUNT_ID,
+          account_id: cashAccountId,
           amount,
-          currency: 'SAR',
+          currency: 'BHD',
           description,
           issue_date: new Date().toISOString().slice(0, 10),
           status: 'unpaid',
@@ -261,9 +290,9 @@ export default function AdahiPage() {
         receipt_number: rcpNum,
         invoice_id: inv.id,
         traveller_id: person.id,
-        account_id: SAR_CASH_ACCOUNT_ID,
+        account_id: cashAccountId,
         amount,
-        currency: 'SAR',
+        currency: 'BHD',
         payment_method: paymentMethod,
         payment_date: new Date().toISOString().slice(0, 10),
         notes: description,
@@ -422,7 +451,7 @@ export default function AdahiPage() {
         <div class="row"><span class="label">رقم البطاقة:</span><span class="value">${person.cpr_number ?? '—'}</span></div>
         <div class="row"><span class="label">الوصف:</span><span class="value">${desc}</span></div>
         <div class="row"><span class="label">طريقة الدفع:</span><span class="value">${pm}</span></div>
-        <div class="amount">المبلغ المستلم: ${formatSar(amt)} ريال سعودي</div>
+        <div class="amount">المبلغ المستلم: ${formatSar(amt)} د.ب</div>
         <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 1000); }, 2000); }</script>
       </body>
       </html>
@@ -558,6 +587,12 @@ export default function AdahiPage() {
         </button>
       </div>
 
+      {!cashAccountLoading && !cashAccountId && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+          لا يوجد صندوق نقدي (BHD) لهذه الحملة. لا يمكن تسجيل مدفوعات الأضاحي حتى يتم إنشاء حساب صندوق بالدينار البحريني من صفحة الحسابات.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'إجمالي القائمة', value: people.length, color: 'text-gray-800' },
@@ -574,7 +609,7 @@ export default function AdahiPage() {
 
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <span className="text-sm text-emerald-700 font-medium">إجمالي المبالغ المحصّلة</span>
-        <span className="text-lg font-bold text-emerald-700">{formatSar(totalSAR)} ر.س</span>
+        <span className="text-lg font-bold text-emerald-700">{formatSar(totalSAR)} د.ب</span>
         <span className="text-xs text-emerald-600">غير المدفوعين: {unpaidCount}</span>
       </div>
 
@@ -715,7 +750,7 @@ export default function AdahiPage() {
                             recordAsExpense: isStaff,
                           })
                         }}
-                        disabled={createPayment.isPending}
+                        disabled={createPayment.isPending || !cashAccountId}
                         className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors"
                       >
                         <FileText size={13} />
@@ -750,7 +785,7 @@ export default function AdahiPage() {
                   <div className="mt-2 text-xs text-gray-500 flex items-center gap-4 flex-wrap">
                     <span>
                       المبلغ:{' '}
-                      <strong className="text-gray-700">{formatSar(Number(record.amount ?? 0))} ر.س</strong>
+                      <strong className="text-gray-700">{formatSar(Number(record.amount ?? 0))} د.ب</strong>
                     </span>
                     {!isStaff && (
                       <span>
@@ -761,7 +796,7 @@ export default function AdahiPage() {
                         )}
                       </span>
                     )}
-                    {isStaff && <span>مصروف — الصندوق SAR</span>}
+                    {isStaff && <span>مصروف — الصندوق</span>}
                   </div>
                 )}
               </div>
@@ -790,7 +825,7 @@ export default function AdahiPage() {
 
             {paymentModal.person.type === 'staff' ? (
               <p className="text-sm text-purple-700 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
-                سيتم تسجيل الدفع كمصروف من الصندوق SAR: {STAFF_EXPENSE_DESC}
+                سيتم تسجيل الدفع كمصروف من الصندوق: {STAFF_EXPENSE_DESC}
               </p>
             ) : (
               <div className="space-y-2">

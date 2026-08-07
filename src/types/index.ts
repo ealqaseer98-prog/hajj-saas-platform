@@ -239,6 +239,202 @@ export interface PreRegistration {
   updated_at:          string
 }
 
+// ─── Umrah ────────────────────────────────────────────────────────────────────
+
+export type UmrahTripStatus = 'upcoming' | 'active' | 'completed' | 'cancelled'
+
+export interface UmrahTrip {
+  id:             string
+  trip_name:      string
+  umrah_year:     string | null
+  departure_date: string | null
+  return_date:    string | null
+  max_travellers: number | null
+  status:         UmrahTripStatus
+  notes:          string | null
+  created_at:     string
+}
+
+export interface UmrahTraveller {
+  id:              string
+  full_name_ar:    string
+  full_name_en:    string | null
+  cpr_number:      string | null
+  passport_number: string | null
+  phone:           string | null
+  gender:          Gender | null
+  date_of_birth:   string | null
+  nationality:     string | null
+  notes:           string | null
+  created_at:      string
+}
+
+export interface UmrahTravellerTrip {
+  id:                 string
+  umrah_traveller_id: string
+  umrah_trip_id:      string
+  status:             string
+  room_number:        string | null
+  notes:              string | null
+  traveller?:         UmrahTraveller
+}
+
+export interface UmrahHotel {
+  id:            string
+  umrah_trip_id: string
+  hotel_name:    string
+  city:          string | null
+  check_in:      string | null
+  check_out:     string | null
+  room_count:    number | null
+  notes:         string | null
+  created_at:    string
+}
+
+export interface UmrahManifestEntry {
+  id:                 string
+  umrah_trip_id:      string
+  umrah_traveller_id: string | null
+  seat_number:        string | null
+  passport_number:    string | null
+  notes:              string | null
+  created_at:         string
+  traveller?:         UmrahTraveller
+}
+
+export interface UmrahRoom {
+  id:             string
+  umrah_trip_id:  string
+  umrah_hotel_id: string | null
+  room_number:    string
+  room_type:      RoomType | null
+  capacity:       number | null
+  floor:          string | null
+  notes:          string | null
+  created_at:     string
+  assignments?:   UmrahRoomAssignment[]
+}
+
+export interface UmrahRoomAssignment {
+  id:                 string
+  umrah_trip_id:      string
+  umrah_room_id:      string
+  umrah_traveller_id: string
+  created_at:         string
+  traveller?:         UmrahTraveller
+}
+
+export interface UmrahIncome {
+  id:                 string
+  campaign_id:        string
+  umrah_trip_id:      string
+  amount:             number | null
+  income_date:        string | null
+  source:             string | null
+  umrah_traveller_id: string | null
+  notes:              string | null
+  created_at:         string
+  updated_at:         string
+}
+
+export type UmrahExpenseCategory = 'hotel' | 'transport' | 'visa' | 'food' | 'other'
+
+export interface UmrahExpense {
+  id:            string
+  campaign_id:   string
+  umrah_trip_id: string
+  amount:        number | null
+  expense_date:  string | null
+  category:      UmrahExpenseCategory | null
+  description:   string | null
+  notes:         string | null
+  created_at:    string
+  updated_at:    string
+}
+
+export interface UmrahTripPricing {
+  id:            string
+  campaign_id:   string
+  umrah_trip_id: string
+  price_quad:    number | null
+  price_triple:  number | null
+  price_double:  number | null
+  price_single:  number | null
+  price_child:   number | null
+  price_infant:  number | null
+  notes:         string | null
+  created_at:    string
+  updated_at:    string
+}
+
+export type UmrahInvoiceRoomType = 'quad' | 'triple' | 'double' | 'single' | 'child' | 'infant'
+
+export interface UmrahInvoice {
+  id:             string
+  campaign_id:    string
+  umrah_trip_id:  string
+  invoice_number: string | null
+  invoice_date:   string | null
+  discount:       number | null
+  notes:          string | null
+  created_at:     string
+  updated_at:     string
+  items?:         UmrahInvoiceItem[]
+  payments?:      UmrahInvoicePayment[]
+}
+
+export interface UmrahInvoiceItem {
+  id:                 string
+  campaign_id:        string
+  umrah_invoice_id:   string
+  umrah_traveller_id: string | null
+  room_type:          UmrahInvoiceRoomType | null
+  price:              number | null
+  created_at?:        string
+  traveller?:         UmrahTraveller
+}
+
+export interface UmrahInvoicePayment {
+  id:               string
+  campaign_id:      string
+  umrah_invoice_id: string
+  amount:           number | null
+  payment_date:     string | null
+  notes:            string | null
+  created_at:       string
+}
+
+export type UmrahTransportType = 'bus' | 'flight'
+
+export interface UmrahTransport {
+  id:              string
+  campaign_id:     string
+  umrah_trip_id:   string
+  transport_type:  UmrahTransportType
+  name:            string
+  capacity:        number | null
+  bus_driver:      string | null
+  bus_plate:       string | null
+  flight_number:   string | null
+  airline:         string | null
+  departure_time:  string | null
+  notes:           string | null
+  created_at:      string
+  updated_at?:     string
+  assignments?:    UmrahTransportAssignment[]
+}
+
+export interface UmrahTransportAssignment {
+  id:                 string
+  campaign_id:        string
+  umrah_trip_id:      string
+  umrah_transport_id: string
+  umrah_traveller_id: string
+  seat_number:        string | null
+  created_at?:        string
+  traveller?:         UmrahTraveller
+}
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export interface AppUser {
   id:          string

@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Users, Plane, BookOpen, Building2,
   LogOut, Wallet, ShieldCheck, FileStack, Bell,
   ClipboardList, Beef, Car, MoreHorizontal, X, MessageSquare, Bus, Landmark,
+  ChevronDown,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { filterNavSectionsForRole } from '../../lib/permissions'
@@ -57,6 +58,16 @@ const navSections: { label: string; items: NavItem[] }[] = [
   },
 ]
 
+const umrahNavSections: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'العمرة',
+    items: [
+      { to: '/umrah/trips', icon: Plane, label: 'الرحلات' },
+      { to: '/umrah/travellers', icon: Users, label: 'المسافرون' },
+    ],
+  },
+]
+
 const MOBILE_PRIMARY_PATHS = ['/dashboard', '/travellers', '/trips', '/hotels'] as const
 
 function getVisibleNav(role: string | undefined) {
@@ -90,6 +101,9 @@ export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const [moreOpen, setMoreOpen] = useState(false)
+  const [openGroups, setOpenGroups] = useState<{ hajj: boolean; umrah: boolean }>({ hajj: true, umrah: true })
+  const toggleGroup = (key: 'hajj' | 'umrah') =>
+    setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }))
 
   const visibleNav = getVisibleNav(user?.role)
   const allItems = visibleNav.flatMap(section => section.items)
@@ -125,22 +139,61 @@ export default function Layout() {
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
-          {visibleNav.map(section => (
-            <div key={section.label}>
-              <p className="text-emerald-400 text-xs font-semibold px-3 mb-1 uppercase tracking-wider">
-                {section.label}
-              </p>
-              <div className="space-y-0.5">
-                {section.items.map(({ to, icon: Icon, label }) => (
+        <nav className="flex-1 p-3 space-y-2 overflow-y-auto">
+          {/* الحج */}
+          <div>
+            <button
+              type="button"
+              onClick={() => toggleGroup('hajj')}
+              className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm font-bold text-emerald-100 hover:bg-emerald-800"
+              aria-expanded={openGroups.hajj}
+            >
+              <span>الحج</span>
+              <ChevronDown size={16} className={clsx('transition-transform', !openGroups.hajj && '-rotate-90')} />
+            </button>
+            {openGroups.hajj && (
+              <div className="mt-1 space-y-4">
+                {visibleNav.map(section => (
+                  <div key={section.label}>
+                    <p className="text-emerald-400 text-xs font-semibold px-3 mb-1 uppercase tracking-wider">
+                      {section.label}
+                    </p>
+                    <div className="space-y-0.5">
+                      {section.items.map(({ to, icon: Icon, label }) => (
+                        <NavLink key={to} to={to} className={({ isActive }) => navLinkClass(isActive)}>
+                          <Icon size={16} className="shrink-0" />
+                          <span className="truncate">{label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* العمرة */}
+          <div>
+            <button
+              type="button"
+              onClick={() => toggleGroup('umrah')}
+              className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm font-bold text-emerald-100 hover:bg-emerald-800"
+              aria-expanded={openGroups.umrah}
+            >
+              <span>العمرة</span>
+              <ChevronDown size={16} className={clsx('transition-transform', !openGroups.umrah && '-rotate-90')} />
+            </button>
+            {openGroups.umrah && (
+              <div className="mt-1 space-y-0.5">
+                {umrahNavSections[0].items.map(({ to, icon: Icon, label }) => (
                   <NavLink key={to} to={to} className={({ isActive }) => navLinkClass(isActive)}>
                     <Icon size={16} className="shrink-0" />
                     <span className="truncate">{label}</span>
                   </NavLink>
                 ))}
               </div>
-            </div>
-          ))}
+            )}
+          </div>
         </nav>
 
         <div className="p-3 border-t border-emerald-800">

@@ -36,6 +36,9 @@ import StaffPage           from './pages/StaffPage'
 import PreRegistrationPage from './pages/PreRegistrationPage'
 import BusAssignmentPage   from './pages/BusAssignmentPage'
 import DhabhPage           from './pages/DhabhPage'
+import UmrahTripsPage      from './pages/UmrahTripsPage'
+import UmrahTripWorkspacePage from './pages/UmrahTripWorkspacePage'
+import UmrahTravellersPage from './pages/UmrahTravellersPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 60 * 2 } }
@@ -191,6 +194,9 @@ export default function App() {
             <Route path="dhabh"                    element={<DhabhPage />} />
             <Route path="staff"                   element={<StaffPage />} />
             <Route path="pre-registration"        element={<PreRegistrationPage />} />
+            <Route path="umrah/trips"             element={<UmrahTripsPage />} />
+            <Route path="umrah/trips/:id"         element={<UmrahTripWorkspacePage />} />
+            <Route path="umrah/travellers"        element={<UmrahTravellersPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

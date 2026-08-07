@@ -93,8 +93,23 @@ export default function VisaTrackingPage() {
         traveller_id: id, status, notes: notes ?? null, changed_by: user?.username ?? null,
       })
     },
-    onSuccess: () => {
+    onMutate: async ({ id, status }) => {
+      await qc.cancelQueries({ queryKey: ['visa-travellers'] })
+      const previous = qc.getQueriesData<Traveller[]>({ queryKey: ['visa-travellers'] })
+      previous.forEach(([key, data]) => {
+        if (!data) return
+        qc.setQueryData<Traveller[]>(key, data.map(t => t.id === id ? { ...t, visa_status: status } : t))
+      })
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      context?.previous.forEach(([key, data]) => {
+        qc.setQueryData(key, data)
+      })
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['visa-travellers'] })
+      qc.invalidateQueries({ queryKey: ['visa-travellers-all-counts'] })
       qc.invalidateQueries({ queryKey: ['visa-history'] })
       qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
@@ -111,11 +126,30 @@ export default function VisaTrackingPage() {
         })
       }
     },
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ['visa-travellers'] })
+      const ids = bulkSelected
+      const previous = qc.getQueriesData<Traveller[]>({ queryKey: ['visa-travellers'] })
+      previous.forEach(([key, data]) => {
+        if (!data) return
+        qc.setQueryData<Traveller[]>(key, data.map(t => ids.has(t.id) ? { ...t, visa_status: bulkStatus } : t))
+      })
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      context?.previous.forEach(([key, data]) => {
+        qc.setQueryData(key, data)
+      })
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['visa-travellers'] })
-      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
       setBulkSelected(new Set())
       setBulkNotes('')
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['visa-travellers'] })
+      qc.invalidateQueries({ queryKey: ['visa-travellers-all-counts'] })
+      qc.invalidateQueries({ queryKey: ['visa-history'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
   })
 
