@@ -355,15 +355,19 @@ export interface UmrahExpense {
 export type UmrahPricingExpenseRule = 'per_person' | 'split_by_room' | 'split_by_travellers' | 'leader'
 
 export interface UmrahPricingExpense {
-  id:            string
-  campaign_id:   string
-  umrah_trip_id: string
-  name:          string | null
-  amount:        number | null
-  rule:          UmrahPricingExpenseRule
-  sort_order:    number | null
-  created_at:    string
-  updated_at:    string
+  id:             string
+  campaign_id:    string
+  umrah_trip_id:  string
+  name:           string | null
+  amount:         number | null
+  amount_quad:    number | null
+  amount_triple:  number | null
+  amount_double:  number | null
+  amount_single:  number | null
+  rule:           UmrahPricingExpenseRule
+  sort_order:     number | null
+  created_at:     string
+  updated_at:     string
 }
 
 export interface UmrahTripPricing {

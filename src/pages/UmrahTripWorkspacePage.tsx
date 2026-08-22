@@ -1717,11 +1717,16 @@ function FinanceTab({ tripId, trip }: { tripId: string; trip: UmrahTrip }) {
 // ─── التسعير ────────────────────────────────────────────────────────────────
 
 type PricingExpenseRule = UmrahPricingExpenseRule
+type SplitRoomKey = 'quad' | 'triple' | 'double' | 'single'
 
 type PricingExpenseDraft = {
   id: string
   name: string
   amount: number | undefined
+  amount_quad: number | undefined
+  amount_triple: number | undefined
+  amount_double: number | undefined
+  amount_single: number | undefined
   rule: PricingExpenseRule
 }
 
@@ -1745,12 +1750,33 @@ const RULE_AR: Record<PricingExpenseRule, string> = {
   leader:               'قائد الرحلة',
 }
 
-const DEFAULT_PRICING_EXPENSES: Omit<PricingExpenseDraft, 'id'>[] = [
-  { name: 'Flight',    amount: undefined, rule: 'per_person' },
-  { name: 'Hotel MD',  amount: undefined, rule: 'split_by_room' },
-  { name: 'Hotel MK',  amount: undefined, rule: 'split_by_room' },
-  { name: 'Transport', amount: undefined, rule: 'split_by_travellers' },
-  { name: 'Leader',    amount: undefined, rule: 'leader' },
+const SPLIT_ROOM_FIELDS: { key: keyof Pick<PricingExpenseDraft, 'amount_quad' | 'amount_triple' | 'amount_double' | 'amount_single'>; label: string }[] = [
+  { key: 'amount_quad',   label: 'رباعية' },
+  { key: 'amount_triple', label: 'ثلاثية' },
+  { key: 'amount_double', label: 'ثنائية' },
+  { key: 'amount_single', label: 'فردية' },
+]
+
+function emptyExpenseDraft(partial: Partial<PricingExpenseDraft> = {}): PricingExpenseDraft {
+  return {
+    id: crypto.randomUUID(),
+    name: '',
+    amount: undefined,
+    amount_quad: undefined,
+    amount_triple: undefined,
+    amount_double: undefined,
+    amount_single: undefined,
+    rule: 'per_person',
+    ...partial,
+  }
+}
+
+const DEFAULT_PRICING_EXPENSES: Pick<PricingExpenseDraft, 'name' | 'rule'>[] = [
+  { name: 'Flight',    rule: 'per_person' },
+  { name: 'Hotel MD',  rule: 'split_by_room' },
+  { name: 'Hotel MK',  rule: 'split_by_room' },
+  { name: 'Transport', rule: 'split_by_travellers' },
+  { name: 'Leader',    rule: 'leader' },
 ]
 
 const EMPTY_PRICING_INPUTS: PricingInputs = {
@@ -1778,7 +1804,7 @@ const CALCULATED_PRICE_ROWS: {
 ]
 
 function seedPricingExpenses(): PricingExpenseDraft[] {
-  return DEFAULT_PRICING_EXPENSES.map(e => ({ ...e, id: crypto.randomUUID() }))
+  return DEFAULT_PRICING_EXPENSES.map(e => emptyExpenseDraft(e))
 }
 
 function calcLeaderShare(
@@ -1792,20 +1818,27 @@ function calcLeaderShare(
   return (leaderCount * (flight + hotel + cash)) / totalTravellers
 }
 
+function splitByRoomAmount(e: PricingExpenseDraft, room: SplitRoomKey): number {
+  if (room === 'quad') return numOrZero(e.amount_quad)
+  if (room === 'triple') return numOrZero(e.amount_triple)
+  if (room === 'double') return numOrZero(e.amount_double)
+  return numOrZero(e.amount_single)
+}
+
 function calcRoomPrice(
-  occupancy: number,
+  room: SplitRoomKey,
   expenses: PricingExpenseDraft[],
   totalTravellers: number,
   margin: number,
   leaderShare: number,
 ): number {
+  const occupancy = PRICING_OCCUPANCY[room]
   let sum = 0
   for (const e of expenses) {
-    const amt = numOrZero(e.amount)
-    if (e.rule === 'per_person') sum += amt
-    else if (e.rule === 'split_by_room') sum += amt / occupancy
+    if (e.rule === 'per_person') sum += numOrZero(e.amount)
+    else if (e.rule === 'split_by_room') sum += splitByRoomAmount(e, room) / occupancy
     else if (e.rule === 'split_by_travellers') {
-      if (totalTravellers > 0) sum += amt / totalTravellers
+      if (totalTravellers > 0) sum += numOrZero(e.amount) / totalTravellers
     }
   }
   return round3(sum + leaderShare + margin)
@@ -1833,13 +1866,13 @@ function calcPricing(
     numOrZero(inputs.leader_cash),
     totalTravellers,
   )
-  const adult = (occ: number) => calcRoomPrice(occ, expenses, totalTravellers, margin, leaderShare)
+  const adult = (room: SplitRoomKey) => calcRoomPrice(room, expenses, totalTravellers, margin, leaderShare)
   return {
-    price_quad:   adult(PRICING_OCCUPANCY.quad),
-    price_triple: adult(PRICING_OCCUPANCY.triple),
-    price_double: adult(PRICING_OCCUPANCY.double),
-    price_single: adult(PRICING_OCCUPANCY.single),
-    price_child:  adult(PRICING_OCCUPANCY.double),
+    price_quad:   adult('quad'),
+    price_triple: adult('triple'),
+    price_double: adult('double'),
+    price_single: adult('single'),
+    price_child:  adult('double'),
     price_infant: round3(numOrZero(inputs.infant_price)),
     leaderShare:  round3(leaderShare),
     travellersMissing: totalTravellers <= 0,
@@ -1905,6 +1938,10 @@ function PricingTab({ tripId }: { tripId: string }) {
         id: e.id,
         name: e.name ?? '',
         amount: e.amount == null ? undefined : Number(e.amount),
+        amount_quad: e.amount_quad == null ? undefined : Number(e.amount_quad),
+        amount_triple: e.amount_triple == null ? undefined : Number(e.amount_triple),
+        amount_double: e.amount_double == null ? undefined : Number(e.amount_double),
+        amount_single: e.amount_single == null ? undefined : Number(e.amount_single),
         rule: e.rule,
       })))
     } else if (!pricing) {
@@ -1937,6 +1974,10 @@ function PricingTab({ tripId }: { tripId: string }) {
             umrah_trip_id: tripId,
             name: r.name.trim() || null,
             amount: nullNum(r.amount) ?? 0,
+            amount_quad: nullNum(r.amount_quad) ?? 0,
+            amount_triple: nullNum(r.amount_triple) ?? 0,
+            amount_double: nullNum(r.amount_double) ?? 0,
+            amount_single: nullNum(r.amount_single) ?? 0,
             rule: r.rule,
             sort_order: i,
           })),
@@ -1985,40 +2026,47 @@ function PricingTab({ tripId }: { tripId: string }) {
             <Tag size={15} /> مصروفات التسعير
           </h2>
           <button type="button"
-            onClick={() => setExpenseRows(rows => [...rows, {
-              id: crypto.randomUUID(), name: '', amount: undefined, rule: 'per_person',
-            }])}
+            onClick={() => setExpenseRows(rows => [...rows, emptyExpenseDraft()])}
             className="flex items-center gap-1 text-xs bg-emerald-700 text-white px-3 py-1.5 rounded-lg">
             <Plus size={12} /> إضافة مصروف
           </button>
         </div>
 
-        <div className="hidden sm:grid sm:grid-cols-[1fr_7rem_minmax(10rem,1fr)_auto] gap-2 text-xs font-medium text-gray-500 mb-2 px-0.5">
-          <span>الاسم</span>
-          <span>المبلغ (BHD)</span>
-          <span>قاعدة التوزيع</span>
-          <span className="w-8" />
-        </div>
         <div className="divide-y divide-gray-50">
           {expenseRows.map(row => (
-            <div key={row.id}
-              className="grid grid-cols-1 sm:grid-cols-[1fr_7rem_minmax(10rem,1fr)_auto] gap-2 py-2 items-center">
-              <input className={ic} placeholder="الاسم" value={row.name}
-                onChange={e => updateExpense(row.id, { name: e.target.value })} />
-              <input className={ic} type="number" step="0.001" dir="ltr" placeholder="0"
-                value={row.amount ?? ''}
-                onChange={e => updateExpense(row.id, { amount: parseInputNum(e.target.value) })} />
-              <select className={ic} value={row.rule}
-                onChange={e => updateExpense(row.id, { rule: e.target.value as PricingExpenseRule })}>
-                {(Object.keys(RULE_AR) as PricingExpenseRule[]).map(k => (
-                  <option key={k} value={k}>{RULE_AR[k]}</option>
-                ))}
-              </select>
-              <button type="button" aria-label="حذف المصروف"
-                onClick={() => setExpenseRows(rows => rows.filter(r => r.id !== row.id))}
-                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg justify-self-end">
-                <Trash2 size={14} />
-              </button>
+            <div key={row.id} className="py-2.5 space-y-2">
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <input className={ic + ' flex-1'} placeholder="الاسم" value={row.name}
+                  onChange={e => updateExpense(row.id, { name: e.target.value })} />
+                {row.rule !== 'split_by_room' && (
+                  <input className={ic + ' sm:w-28'} type="number" step="0.001" dir="ltr" placeholder="المبلغ"
+                    value={row.amount ?? ''}
+                    onChange={e => updateExpense(row.id, { amount: parseInputNum(e.target.value) })} />
+                )}
+                <select className={ic + ' sm:w-52'} value={row.rule}
+                  onChange={e => updateExpense(row.id, { rule: e.target.value as PricingExpenseRule })}>
+                  {(Object.keys(RULE_AR) as PricingExpenseRule[]).map(k => (
+                    <option key={k} value={k}>{RULE_AR[k]}</option>
+                  ))}
+                </select>
+                <button type="button" aria-label="حذف المصروف"
+                  onClick={() => setExpenseRows(rows => rows.filter(r => r.id !== row.id))}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg self-end sm:self-auto shrink-0">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+              {row.rule === 'split_by_room' && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {SPLIT_ROOM_FIELDS.map(({ key, label }) => (
+                    <div key={key}>
+                      <label className="block text-[10px] font-medium text-gray-500 mb-1">{label}</label>
+                      <input className={ic} type="number" step="0.001" dir="ltr" placeholder="0"
+                        value={row[key] ?? ''}
+                        onChange={e => updateExpense(row.id, { [key]: parseInputNum(e.target.value) })} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           {expenseRows.length === 0 && (
