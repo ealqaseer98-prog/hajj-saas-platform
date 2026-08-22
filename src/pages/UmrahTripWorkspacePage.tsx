@@ -1732,11 +1732,13 @@ type PricingExpenseDraft = {
 
 type PricingInputs = {
   total_travellers:  number | undefined
-  margin_per_person: number | undefined
+  margin_quad:       number | undefined
+  margin_triple:     number | undefined
+  margin_double:     number | undefined
+  margin_single:     number | undefined
   infant_price:      number | undefined
   leader_count:      number | undefined
   leader_flight:     number | undefined
-  leader_hotel:      number | undefined
   leader_cash:       number | undefined
   notes:             string
 }
@@ -1781,14 +1783,23 @@ const DEFAULT_PRICING_EXPENSES: Pick<PricingExpenseDraft, 'name' | 'rule'>[] = [
 
 const EMPTY_PRICING_INPUTS: PricingInputs = {
   total_travellers: undefined,
-  margin_per_person: undefined,
+  margin_quad: undefined,
+  margin_triple: undefined,
+  margin_double: undefined,
+  margin_single: undefined,
   infant_price: 50,
   leader_count: 2,
   leader_flight: undefined,
-  leader_hotel: undefined,
   leader_cash: undefined,
   notes: '',
 }
+
+const MARGIN_FIELDS: { key: keyof Pick<PricingInputs, 'margin_quad' | 'margin_triple' | 'margin_double' | 'margin_single'>; label: string }[] = [
+  { key: 'margin_quad',   label: 'هامش الربح - رباعية' },
+  { key: 'margin_triple', label: 'هامش - ثلاثية' },
+  { key: 'margin_double', label: 'هامش - ثنائية' },
+  { key: 'margin_single', label: 'هامش - فردية' },
+]
 
 const CALCULATED_PRICE_ROWS: {
   key: 'quad' | 'triple' | 'double' | 'single' | 'child' | 'infant'
@@ -1807,6 +1818,14 @@ function seedPricingExpenses(): PricingExpenseDraft[] {
   return DEFAULT_PRICING_EXPENSES.map(e => emptyExpenseDraft(e))
 }
 
+function calcAutoLeaderHotel(expenses: PricingExpenseDraft[]): number {
+  let sum = 0
+  for (const e of expenses) {
+    if (e.rule === 'split_by_room') sum += numOrZero(e.amount_quad) / PRICING_OCCUPANCY.quad
+  }
+  return round3(sum)
+}
+
 function calcLeaderShare(
   leaderCount: number,
   flight: number,
@@ -1823,6 +1842,13 @@ function splitByRoomAmount(e: PricingExpenseDraft, room: SplitRoomKey): number {
   if (room === 'triple') return numOrZero(e.amount_triple)
   if (room === 'double') return numOrZero(e.amount_double)
   return numOrZero(e.amount_single)
+}
+
+function marginForRoom(inputs: PricingInputs, room: SplitRoomKey): number {
+  if (room === 'quad') return numOrZero(inputs.margin_quad)
+  if (room === 'triple') return numOrZero(inputs.margin_triple)
+  if (room === 'double') return numOrZero(inputs.margin_double)
+  return numOrZero(inputs.margin_single)
 }
 
 function calcRoomPrice(
@@ -1855,18 +1881,20 @@ function calcPricing(
   price_child: number
   price_infant: number
   leaderShare: number
+  autoLeaderHotel: number
   travellersMissing: boolean
 } {
   const totalTravellers = numOrZero(inputs.total_travellers)
-  const margin = numOrZero(inputs.margin_per_person)
+  const autoLeaderHotel = calcAutoLeaderHotel(expenses)
   const leaderShare = calcLeaderShare(
     numOrZero(inputs.leader_count),
     numOrZero(inputs.leader_flight),
-    numOrZero(inputs.leader_hotel),
+    autoLeaderHotel,
     numOrZero(inputs.leader_cash),
     totalTravellers,
   )
-  const adult = (room: SplitRoomKey) => calcRoomPrice(room, expenses, totalTravellers, margin, leaderShare)
+  const adult = (room: SplitRoomKey) =>
+    calcRoomPrice(room, expenses, totalTravellers, marginForRoom(inputs, room), leaderShare)
   return {
     price_quad:   adult('quad'),
     price_triple: adult('triple'),
@@ -1875,6 +1903,7 @@ function calcPricing(
     price_child:  adult('double'),
     price_infant: round3(numOrZero(inputs.infant_price)),
     leaderShare:  round3(leaderShare),
+    autoLeaderHotel,
     travellersMissing: totalTravellers <= 0,
   }
 }
@@ -1921,11 +1950,13 @@ function PricingTab({ tripId }: { tripId: string }) {
     if (pricing) {
       setForm({
         total_travellers:  pricing.total_travellers ?? undefined,
-        margin_per_person: pricing.margin_per_person ?? undefined,
+        margin_quad:       pricing.margin_quad ?? undefined,
+        margin_triple:     pricing.margin_triple ?? undefined,
+        margin_double:     pricing.margin_double ?? undefined,
+        margin_single:     pricing.margin_single ?? undefined,
         infant_price:      pricing.infant_price ?? 50,
         leader_count:      pricing.leader_count ?? 2,
         leader_flight:     pricing.leader_flight ?? undefined,
-        leader_hotel:      pricing.leader_hotel ?? undefined,
         leader_cash:       pricing.leader_cash ?? undefined,
         notes:             pricing.notes ?? '',
       })
@@ -1986,11 +2017,14 @@ function PricingTab({ tripId }: { tripId: string }) {
       await supabase.from('umrah_trip_pricing').upsert({
         umrah_trip_id:     tripId,
         total_travellers:  nullNum(form.total_travellers) ?? 0,
-        margin_per_person: nullNum(form.margin_per_person) ?? 0,
+        margin_quad:       nullNum(form.margin_quad) ?? 0,
+        margin_triple:     nullNum(form.margin_triple) ?? 0,
+        margin_double:     nullNum(form.margin_double) ?? 0,
+        margin_single:     nullNum(form.margin_single) ?? 0,
         infant_price:      nullNum(form.infant_price) ?? 0,
         leader_count:      nullNum(form.leader_count) ?? 0,
         leader_flight:     nullNum(form.leader_flight) ?? 0,
-        leader_hotel:      nullNum(form.leader_hotel) ?? 0,
+        leader_hotel:      prices.autoLeaderHotel,
         leader_cash:       nullNum(form.leader_cash) ?? 0,
         notes:             form.notes.trim() || null,
         price_quad:        prices.price_quad,
@@ -2088,12 +2122,6 @@ function PricingTab({ tripId }: { tripId: string }) {
                 onChange={e => setForm(f => ({ ...f, total_travellers: parseInputNum(e.target.value) }))} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">هامش الربح للفرد (BHD)</label>
-              <input className={ic} type="number" step="0.001" dir="ltr"
-                value={form.margin_per_person ?? ''}
-                onChange={e => setForm(f => ({ ...f, margin_per_person: parseInputNum(e.target.value) }))} />
-            </div>
-            <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">سعر الرضيع (BHD)</label>
               <input className={ic} type="number" step="0.001" min="0" dir="ltr"
                 value={form.infant_price ?? ''}
@@ -2106,6 +2134,16 @@ function PricingTab({ tripId }: { tripId: string }) {
                 onChange={e => setForm(f => ({ ...f, leader_count: parseInputNum(e.target.value) }))} />
             </div>
           </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {MARGIN_FIELDS.map(({ key, label }) => (
+              <div key={key}>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                <input className={ic} type="number" step="0.001" dir="ltr"
+                  value={form[key] ?? ''}
+                  onChange={e => setForm(f => ({ ...f, [key]: parseInputNum(e.target.value) }))} />
+              </div>
+            ))}
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">تذكرة القائد (BHD)</label>
@@ -2114,10 +2152,10 @@ function PricingTab({ tripId }: { tripId: string }) {
                 onChange={e => setForm(f => ({ ...f, leader_flight: parseInputNum(e.target.value) }))} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">فندق القائد (BHD)</label>
-              <input className={ic} type="number" step="0.001" min="0" dir="ltr"
-                value={form.leader_hotel ?? ''}
-                onChange={e => setForm(f => ({ ...f, leader_hotel: parseInputNum(e.target.value) }))} />
+              <label className="block text-xs font-medium text-gray-600 mb-1">فندق القائد (محسوب)</label>
+              <div className={ic + ' bg-gray-50 text-gray-700'} dir="ltr">
+                {formatBhd(result.autoLeaderHotel)}
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">نقدية القائد (BHD)</label>

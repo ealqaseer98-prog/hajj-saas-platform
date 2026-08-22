@@ -380,7 +380,10 @@ export interface UmrahTripPricing {
   price_single:       number | null
   price_child:        number | null
   price_infant:       number | null
-  margin_per_person:  number | null
+  margin_quad:        number | null
+  margin_triple:      number | null
+  margin_double:      number | null
+  margin_single:      number | null
   infant_price:       number | null
   total_travellers:   number | null
   leader_count:       number | null
