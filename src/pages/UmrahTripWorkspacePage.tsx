@@ -1,10 +1,10 @@
 // src/pages/UmrahTripWorkspacePage.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { ArrowRight, Users, UserPlus, UserMinus, Building2, ClipboardList, Plus, Edit2, Trash2, BedDouble, AlertTriangle, Printer, Wallet, Tag, FileText, ChevronDown, ChevronUp, Download, Bus, Plane } from 'lucide-react'
-import type { UmrahTrip, UmrahTraveller, UmrahTravellerTrip, UmrahHotel, UmrahManifestEntry, UmrahRoom, RoomType, UmrahIncome, UmrahExpense, UmrahExpenseCategory, UmrahTripPricing, UmrahInvoice, UmrahInvoiceRoomType, UmrahTransport, UmrahTransportType } from '../types'
+import type { UmrahTrip, UmrahTraveller, UmrahTravellerTrip, UmrahHotel, UmrahManifestEntry, UmrahRoom, RoomType, UmrahIncome, UmrahExpense, UmrahExpenseCategory, UmrahTripPricing, UmrahPricingExpense, UmrahPricingExpenseRule, UmrahInvoice, UmrahInvoiceRoomType, UmrahTransport, UmrahTransportType } from '../types'
 import { ROOM_TYPE_AR, ROOM_TYPE_CAPACITY } from '../lib/roomTypes'
 import { useAuthStore } from '../store/authStore'
 
@@ -55,6 +55,21 @@ function formatBhd(n: number) {
 
 function nullNum(v: number | undefined | null) {
   return v == null || Number.isNaN(Number(v)) ? null : Number(v)
+}
+
+function numOrZero(v: number | undefined | null) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+function round3(v: number) {
+  return Math.round(v * 1000) / 1000
+}
+
+function parseInputNum(raw: string): number | undefined {
+  if (raw === '') return undefined
+  const n = Number(raw)
+  return Number.isNaN(n) ? undefined : n
 }
 
 export default function UmrahTripWorkspacePage() {
@@ -1701,35 +1716,144 @@ function FinanceTab({ tripId, trip }: { tripId: string; trip: UmrahTrip }) {
 
 // ─── التسعير ────────────────────────────────────────────────────────────────
 
-type PricingForm = {
-  price_quad:   number | undefined
-  price_triple: number | undefined
-  price_double: number | undefined
-  price_single: number | undefined
-  price_child:  number | undefined
-  price_infant: number | undefined
-  notes:        string
+type PricingExpenseRule = UmrahPricingExpenseRule
+
+type PricingExpenseDraft = {
+  id: string
+  name: string
+  amount: number | undefined
+  rule: PricingExpenseRule
 }
 
-const EMPTY_PRICING: PricingForm = {
-  price_quad: undefined, price_triple: undefined, price_double: undefined,
-  price_single: undefined, price_child: undefined, price_infant: undefined, notes: '',
+type PricingInputs = {
+  total_travellers:  number | undefined
+  margin_per_person: number | undefined
+  infant_price:      number | undefined
+  leader_count:      number | undefined
+  leader_flight:     number | undefined
+  leader_hotel:      number | undefined
+  leader_cash:       number | undefined
+  notes:             string
 }
 
-const PRICE_FIELDS: { key: keyof Omit<PricingForm, 'notes'>; label: string }[] = [
-  { key: 'price_quad',   label: 'غرفة رباعية' },
-  { key: 'price_triple', label: 'غرفة ثلاثية' },
-  { key: 'price_double', label: 'غرفة ثنائية' },
-  { key: 'price_single', label: 'غرفة فردية' },
-  { key: 'price_child',  label: 'طفل' },
-  { key: 'price_infant', label: 'رضيع' },
+const PRICING_OCCUPANCY = { quad: 4, triple: 3, double: 2, single: 1 } as const
+
+const RULE_AR: Record<PricingExpenseRule, string> = {
+  per_person:           'لكل شخص',
+  split_by_room:        'يقسم على الغرفة',
+  split_by_travellers:  'يقسم على عدد المسافرين',
+  leader:               'قائد الرحلة',
+}
+
+const DEFAULT_PRICING_EXPENSES: Omit<PricingExpenseDraft, 'id'>[] = [
+  { name: 'Flight',    amount: undefined, rule: 'per_person' },
+  { name: 'Hotel MD',  amount: undefined, rule: 'split_by_room' },
+  { name: 'Hotel MK',  amount: undefined, rule: 'split_by_room' },
+  { name: 'Transport', amount: undefined, rule: 'split_by_travellers' },
+  { name: 'Leader',    amount: undefined, rule: 'leader' },
 ]
+
+const EMPTY_PRICING_INPUTS: PricingInputs = {
+  total_travellers: undefined,
+  margin_per_person: undefined,
+  infant_price: 50,
+  leader_count: 2,
+  leader_flight: undefined,
+  leader_hotel: undefined,
+  leader_cash: undefined,
+  notes: '',
+}
+
+const CALCULATED_PRICE_ROWS: {
+  key: 'quad' | 'triple' | 'double' | 'single' | 'child' | 'infant'
+  label: string
+  occupancy: number | null
+}[] = [
+  { key: 'quad',   label: 'رباعية', occupancy: 4 },
+  { key: 'triple', label: 'ثلاثية', occupancy: 3 },
+  { key: 'double', label: 'ثنائية', occupancy: 2 },
+  { key: 'single', label: 'فردية', occupancy: 1 },
+  { key: 'child',  label: 'طفل',    occupancy: 2 },
+  { key: 'infant', label: 'رضيع',   occupancy: null },
+]
+
+function seedPricingExpenses(): PricingExpenseDraft[] {
+  return DEFAULT_PRICING_EXPENSES.map(e => ({ ...e, id: crypto.randomUUID() }))
+}
+
+function calcLeaderShare(
+  leaderCount: number,
+  flight: number,
+  hotel: number,
+  cash: number,
+  totalTravellers: number,
+): number {
+  if (totalTravellers <= 0) return 0
+  return (leaderCount * (flight + hotel + cash)) / totalTravellers
+}
+
+function calcRoomPrice(
+  occupancy: number,
+  expenses: PricingExpenseDraft[],
+  totalTravellers: number,
+  margin: number,
+  leaderShare: number,
+): number {
+  let sum = 0
+  for (const e of expenses) {
+    const amt = numOrZero(e.amount)
+    if (e.rule === 'per_person') sum += amt
+    else if (e.rule === 'split_by_room') sum += amt / occupancy
+    else if (e.rule === 'split_by_travellers') {
+      if (totalTravellers > 0) sum += amt / totalTravellers
+    }
+  }
+  return round3(sum + leaderShare + margin)
+}
+
+function calcPricing(
+  expenses: PricingExpenseDraft[],
+  inputs: PricingInputs,
+): {
+  price_quad: number
+  price_triple: number
+  price_double: number
+  price_single: number
+  price_child: number
+  price_infant: number
+  leaderShare: number
+  travellersMissing: boolean
+} {
+  const totalTravellers = numOrZero(inputs.total_travellers)
+  const margin = numOrZero(inputs.margin_per_person)
+  const leaderShare = calcLeaderShare(
+    numOrZero(inputs.leader_count),
+    numOrZero(inputs.leader_flight),
+    numOrZero(inputs.leader_hotel),
+    numOrZero(inputs.leader_cash),
+    totalTravellers,
+  )
+  const adult = (occ: number) => calcRoomPrice(occ, expenses, totalTravellers, margin, leaderShare)
+  return {
+    price_quad:   adult(PRICING_OCCUPANCY.quad),
+    price_triple: adult(PRICING_OCCUPANCY.triple),
+    price_double: adult(PRICING_OCCUPANCY.double),
+    price_single: adult(PRICING_OCCUPANCY.single),
+    price_child:  adult(PRICING_OCCUPANCY.double),
+    price_infant: round3(numOrZero(inputs.infant_price)),
+    leaderShare:  round3(leaderShare),
+    travellersMissing: totalTravellers <= 0,
+  }
+}
 
 function PricingTab({ tripId }: { tripId: string }) {
   const qc = useQueryClient()
-  const [form, setForm] = useState<PricingForm>(EMPTY_PRICING)
+  const [form, setForm] = useState<PricingInputs>(EMPTY_PRICING_INPUTS)
+  const [expenseRows, setExpenseRows] = useState<PricingExpenseDraft[]>([])
+  const loadedIdsRef = useRef<string[]>([])
+  const hydratedRef = useRef(false)
 
-  const { data: pricing, isLoading } = useQuery({
+  const { data: pricing, isLoading: pricingLoading } = useQuery({
     queryKey: ['umrah-trip-pricing', tripId],
     queryFn: async () => {
       const { data } = await supabase
@@ -1741,37 +1865,109 @@ function PricingTab({ tripId }: { tripId: string }) {
     },
   })
 
+  const { data: dbExpenses, isLoading: expensesLoading } = useQuery({
+    queryKey: ['umrah-pricing-expenses', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('umrah_pricing_expenses')
+        .select('*')
+        .eq('umrah_trip_id', tripId)
+        .order('sort_order', { ascending: true })
+      return (data ?? []) as UmrahPricingExpense[]
+    },
+  })
+
   useEffect(() => {
+    hydratedRef.current = false
+  }, [tripId])
+
+  useEffect(() => {
+    if (pricingLoading || expensesLoading) return
+    if (hydratedRef.current) return
+    hydratedRef.current = true
     if (pricing) {
       setForm({
-        price_quad:   pricing.price_quad ?? undefined,
-        price_triple: pricing.price_triple ?? undefined,
-        price_double: pricing.price_double ?? undefined,
-        price_single: pricing.price_single ?? undefined,
-        price_child:  pricing.price_child ?? undefined,
-        price_infant: pricing.price_infant ?? undefined,
-        notes:        pricing.notes ?? '',
+        total_travellers:  pricing.total_travellers ?? undefined,
+        margin_per_person: pricing.margin_per_person ?? undefined,
+        infant_price:      pricing.infant_price ?? 50,
+        leader_count:      pricing.leader_count ?? 2,
+        leader_flight:     pricing.leader_flight ?? undefined,
+        leader_hotel:      pricing.leader_hotel ?? undefined,
+        leader_cash:       pricing.leader_cash ?? undefined,
+        notes:             pricing.notes ?? '',
       })
     } else {
-      setForm(EMPTY_PRICING)
+      setForm({ ...EMPTY_PRICING_INPUTS })
     }
-  }, [pricing])
+    if (dbExpenses && dbExpenses.length > 0) {
+      loadedIdsRef.current = dbExpenses.map(e => e.id)
+      setExpenseRows(dbExpenses.map(e => ({
+        id: e.id,
+        name: e.name ?? '',
+        amount: e.amount == null ? undefined : Number(e.amount),
+        rule: e.rule,
+      })))
+    } else if (!pricing) {
+      loadedIdsRef.current = []
+      setExpenseRows(seedPricingExpenses())
+    } else {
+      loadedIdsRef.current = []
+      setExpenseRows([])
+    }
+  }, [pricing, dbExpenses, pricingLoading, expensesLoading])
+
+  const result = useMemo(() => calcPricing(expenseRows, form), [expenseRows, form])
+
+  const updateExpense = (id: string, patch: Partial<PricingExpenseDraft>) => {
+    setExpenseRows(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r))
+  }
 
   const save = useMutation({
     mutationFn: async () => {
+      const prices = calcPricing(expenseRows, form)
+      const keepIds = expenseRows.map(r => r.id)
+      const toDelete = loadedIdsRef.current.filter(id => !keepIds.includes(id))
+      if (toDelete.length > 0) {
+        await supabase.from('umrah_pricing_expenses').delete().in('id', toDelete).throwOnError()
+      }
+      if (expenseRows.length > 0) {
+        await supabase.from('umrah_pricing_expenses').upsert(
+          expenseRows.map((r, i) => ({
+            id: r.id,
+            umrah_trip_id: tripId,
+            name: r.name.trim() || null,
+            amount: nullNum(r.amount) ?? 0,
+            rule: r.rule,
+            sort_order: i,
+          })),
+        ).throwOnError()
+      }
       await supabase.from('umrah_trip_pricing').upsert({
-        umrah_trip_id: tripId,
-        price_quad:    nullNum(form.price_quad),
-        price_triple:  nullNum(form.price_triple),
-        price_double:  nullNum(form.price_double),
-        price_single:  nullNum(form.price_single),
-        price_child:   nullNum(form.price_child),
-        price_infant:  nullNum(form.price_infant),
-        notes:         form.notes || null,
+        umrah_trip_id:     tripId,
+        total_travellers:  nullNum(form.total_travellers) ?? 0,
+        margin_per_person: nullNum(form.margin_per_person) ?? 0,
+        infant_price:      nullNum(form.infant_price) ?? 0,
+        leader_count:      nullNum(form.leader_count) ?? 0,
+        leader_flight:     nullNum(form.leader_flight) ?? 0,
+        leader_hotel:      nullNum(form.leader_hotel) ?? 0,
+        leader_cash:       nullNum(form.leader_cash) ?? 0,
+        notes:             form.notes.trim() || null,
+        price_quad:        prices.price_quad,
+        price_triple:      prices.price_triple,
+        price_double:      prices.price_double,
+        price_single:      prices.price_single,
+        price_child:       prices.price_child,
+        price_infant:      prices.price_infant,
       }, { onConflict: 'umrah_trip_id' }).throwOnError()
+      loadedIdsRef.current = keepIds
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['umrah-trip-pricing', tripId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['umrah-trip-pricing', tripId] })
+      qc.invalidateQueries({ queryKey: ['umrah-pricing-expenses', tripId] })
+    },
   })
+
+  const isLoading = pricingLoading || expensesLoading
 
   if (isLoading) {
     return (
@@ -1782,42 +1978,152 @@ function PricingTab({ tripId }: { tripId: string }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-          <Tag size={15} /> تسعير الرحلة
-        </h2>
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <Tag size={15} /> مصروفات التسعير
+          </h2>
+          <button type="button"
+            onClick={() => setExpenseRows(rows => [...rows, {
+              id: crypto.randomUUID(), name: '', amount: undefined, rule: 'per_person',
+            }])}
+            className="flex items-center gap-1 text-xs bg-emerald-700 text-white px-3 py-1.5 rounded-lg">
+            <Plus size={12} /> إضافة مصروف
+          </button>
+        </div>
+
+        <div className="hidden sm:grid sm:grid-cols-[1fr_7rem_minmax(10rem,1fr)_auto] gap-2 text-xs font-medium text-gray-500 mb-2 px-0.5">
+          <span>الاسم</span>
+          <span>المبلغ (BHD)</span>
+          <span>قاعدة التوزيع</span>
+          <span className="w-8" />
+        </div>
+        <div className="divide-y divide-gray-50">
+          {expenseRows.map(row => (
+            <div key={row.id}
+              className="grid grid-cols-1 sm:grid-cols-[1fr_7rem_minmax(10rem,1fr)_auto] gap-2 py-2 items-center">
+              <input className={ic} placeholder="الاسم" value={row.name}
+                onChange={e => updateExpense(row.id, { name: e.target.value })} />
+              <input className={ic} type="number" step="0.001" dir="ltr" placeholder="0"
+                value={row.amount ?? ''}
+                onChange={e => updateExpense(row.id, { amount: parseInputNum(e.target.value) })} />
+              <select className={ic} value={row.rule}
+                onChange={e => updateExpense(row.id, { rule: e.target.value as PricingExpenseRule })}>
+                {(Object.keys(RULE_AR) as PricingExpenseRule[]).map(k => (
+                  <option key={k} value={k}>{RULE_AR[k]}</option>
+                ))}
+              </select>
+              <button type="button" aria-label="حذف المصروف"
+                onClick={() => setExpenseRows(rows => rows.filter(r => r.id !== row.id))}
+                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg justify-self-end">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          {expenseRows.length === 0 && (
+            <p className="text-sm text-gray-400 py-4 text-center">لا توجد مصروفات — أضف بنداً أو احفظ القائمة الفارغة</p>
+          )}
+        </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          {PRICE_FIELDS.map(({ key, label }) => (
-            <div key={key}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{label} (BHD)</label>
-              <input
-                className={ic}
-                type="number"
-                step="0.001"
-                min="0"
-                dir="ltr"
-                value={form[key] ?? ''}
-                onChange={e => setForm(f => ({
-                  ...f,
-                  [key]: e.target.value === '' ? undefined : +e.target.value,
-                }))}
-              />
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-4">
+          <Users size={15} /> مدخلات الرحلة
+        </h2>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">إجمالي المسافرين</label>
+              <input className={ic} type="number" min="0" step="1" dir="ltr"
+                value={form.total_travellers ?? ''}
+                onChange={e => setForm(f => ({ ...f, total_travellers: parseInputNum(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">هامش الربح للفرد (BHD)</label>
+              <input className={ic} type="number" step="0.001" dir="ltr"
+                value={form.margin_per_person ?? ''}
+                onChange={e => setForm(f => ({ ...f, margin_per_person: parseInputNum(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">سعر الرضيع (BHD)</label>
+              <input className={ic} type="number" step="0.001" min="0" dir="ltr"
+                value={form.infant_price ?? ''}
+                onChange={e => setForm(f => ({ ...f, infant_price: parseInputNum(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">عدد القادة</label>
+              <input className={ic} type="number" min="0" step="1" dir="ltr"
+                value={form.leader_count ?? ''}
+                onChange={e => setForm(f => ({ ...f, leader_count: parseInputNum(e.target.value) }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">تذكرة القائد (BHD)</label>
+              <input className={ic} type="number" step="0.001" min="0" dir="ltr"
+                value={form.leader_flight ?? ''}
+                onChange={e => setForm(f => ({ ...f, leader_flight: parseInputNum(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">فندق القائد (BHD)</label>
+              <input className={ic} type="number" step="0.001" min="0" dir="ltr"
+                value={form.leader_hotel ?? ''}
+                onChange={e => setForm(f => ({ ...f, leader_hotel: parseInputNum(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">نقدية القائد (BHD)</label>
+              <input className={ic} type="number" step="0.001" min="0" dir="ltr"
+                value={form.leader_cash ?? ''}
+                onChange={e => setForm(f => ({ ...f, leader_cash: parseInputNum(e.target.value) }))} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">ملاحظات</label>
+            <textarea className={ic + ' resize-none'} rows={2} value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-4">
+          <Tag size={15} /> الأسعار المحسوبة
+        </h2>
+
+        {result.travellersMissing && (
+          <div className="flex items-center gap-2 text-amber-700 text-xs bg-amber-50 px-3 py-2 rounded-lg mb-3">
+            <AlertTriangle size={14} className="shrink-0" />
+            يُحتاج إجمالي المسافرين لتسعير دقيق. تقسيم النقل وحصة القائد تُعامل حالياً كصفر.
+          </div>
+        )}
+
+        <div className="divide-y divide-gray-50 mb-3">
+          {CALCULATED_PRICE_ROWS.map(row => (
+            <div key={row.key} className="flex items-center justify-between py-2.5 text-sm">
+              <div>
+                <span className="font-medium text-gray-800">{row.label}</span>
+                {row.occupancy != null && (
+                  <span className="text-gray-400 text-xs mr-2">إشغال {row.occupancy}</span>
+                )}
+              </div>
+              <span className="font-semibold text-emerald-700" dir="ltr">
+                {formatBhd(result[INVOICE_PRICE_KEY[row.key]])}
+              </span>
             </div>
           ))}
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">ملاحظات</label>
-          <textarea className={ic + ' resize-none'} rows={2} value={form.notes}
-            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-        </div>
-        <button onClick={() => save.mutate()}
+        <p className="text-xs text-gray-400 mb-4">
+          حصة القائد للفرد: <span dir="ltr">{formatBhd(result.leaderShare)}</span>
+        </p>
+
+        {save.isError && (
+          <p className="text-xs text-red-600 text-center mb-2">فشل حفظ التسعير</p>
+        )}
+        <button type="button" onClick={() => save.mutate()}
           disabled={save.isPending}
           className="w-full bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
-          {save.isPending ? 'جارٍ الحفظ...' : 'حفظ'}
+          {save.isPending ? 'جارٍ الحفظ...' : 'حفظ التسعير'}
         </button>
       </div>
     </div>

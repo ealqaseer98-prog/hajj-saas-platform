@@ -352,19 +352,40 @@ export interface UmrahExpense {
   updated_at:    string
 }
 
-export interface UmrahTripPricing {
+export type UmrahPricingExpenseRule = 'per_person' | 'split_by_room' | 'split_by_travellers' | 'leader'
+
+export interface UmrahPricingExpense {
   id:            string
   campaign_id:   string
   umrah_trip_id: string
-  price_quad:    number | null
-  price_triple:  number | null
-  price_double:  number | null
-  price_single:  number | null
-  price_child:   number | null
-  price_infant:  number | null
-  notes:         string | null
+  name:          string | null
+  amount:        number | null
+  rule:          UmrahPricingExpenseRule
+  sort_order:    number | null
   created_at:    string
   updated_at:    string
+}
+
+export interface UmrahTripPricing {
+  id:                 string
+  campaign_id:        string
+  umrah_trip_id:      string
+  price_quad:         number | null
+  price_triple:       number | null
+  price_double:       number | null
+  price_single:       number | null
+  price_child:        number | null
+  price_infant:       number | null
+  margin_per_person:  number | null
+  infant_price:       number | null
+  total_travellers:   number | null
+  leader_count:       number | null
+  leader_flight:      number | null
+  leader_hotel:       number | null
+  leader_cash:        number | null
+  notes:              string | null
+  created_at:         string
+  updated_at:         string
 }
 
 export type UmrahInvoiceRoomType = 'quad' | 'triple' | 'double' | 'single' | 'child' | 'infant'
