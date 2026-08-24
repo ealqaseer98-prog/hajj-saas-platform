@@ -72,10 +72,42 @@ function parseInputNum(raw: string): number | undefined {
   return Number.isNaN(n) ? undefined : n
 }
 
+function useCampaignPrintHeader() {
+  const campaignId = useAuthStore(s => s.user?.campaign_id)
+  const { data } = useQuery({
+    queryKey: ['campaign-print-header', campaignId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('campaigns')
+        .select('campaign_name_ar, license_number')
+        .eq('id', campaignId!)
+        .maybeSingle()
+      return (data ?? null) as { campaign_name_ar: string | null; license_number: string | null } | null
+    },
+    enabled: !!campaignId,
+  })
+  const name = (data?.campaign_name_ar ?? '').trim()
+  const license = (data?.license_number ?? '').trim()
+  if (!name) return ''
+  if (!license) return name
+  return `${name} - رخصة رقم ${license}`
+}
+
+function PrintCampaignHeader({ header }: { header: string }) {
+  if (!header) return null
+  return (
+    <p style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px', color: '#000' }}>
+      {header}
+    </p>
+  )
+}
+
 export default function UmrahTripWorkspacePage() {
   const { id }   = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('travellers')
+
+  const campaignPrintHeader = useCampaignPrintHeader()
 
   const { data: trip } = useQuery({
     queryKey: ['umrah-trip', id],
@@ -136,10 +168,10 @@ export default function UmrahTripWorkspacePage() {
       {activeTab === 'hotels'       && <HotelsTab tripId={id} />}
       {activeTab === 'rooms'        && <RoomsTab tripId={id} enrolled={enrolled} />}
       {activeTab === 'distribution' && <DistributionTab tripId={id} enrolled={enrolled} />}
-      {activeTab === 'manifest'     && <ManifestTab tripId={id} tripName={trip.trip_name} />}
-      {activeTab === 'finance'      && <FinanceTab tripId={id} trip={trip} />}
+      {activeTab === 'manifest'     && <ManifestTab tripId={id} tripName={trip.trip_name} campaignPrintHeader={campaignPrintHeader} />}
+      {activeTab === 'finance'      && <FinanceTab tripId={id} trip={trip} campaignPrintHeader={campaignPrintHeader} />}
       {activeTab === 'pricing'      && <PricingTab tripId={id} />}
-      {activeTab === 'invoices'     && <InvoicesTab tripId={id} tripName={trip.trip_name} enrolled={enrolled} />}
+      {activeTab === 'invoices'     && <InvoicesTab tripId={id} tripName={trip.trip_name} enrolled={enrolled} campaignPrintHeader={campaignPrintHeader} />}
     </div>
   )
 }
@@ -1205,25 +1237,13 @@ function DistributionTab({ tripId, enrolled }: { tripId: string; enrolled: Umrah
 const EMPTY_INCOME: Partial<UmrahIncome> = { amount: undefined, income_date: '', source: '', notes: '' }
 const EMPTY_EXPENSE: Partial<UmrahExpense> = { amount: undefined, expense_date: '', category: 'other', description: '', notes: '' }
 
-function FinanceTab({ tripId, trip }: { tripId: string; trip: UmrahTrip }) {
+function FinanceTab({ tripId, trip, campaignPrintHeader }: { tripId: string; trip: UmrahTrip; campaignPrintHeader: string }) {
   const qc = useQueryClient()
-  const campaignId = useAuthStore(s => s.user?.campaign_id)
   const [incomeModal, setIncomeModal] = useState<'add' | 'edit' | null>(null)
   const [selectedIncome, setSelectedIncome] = useState<Partial<UmrahIncome>>(EMPTY_INCOME)
   const [expenseModal, setExpenseModal] = useState<'add' | 'edit' | null>(null)
   const [selectedExpense, setSelectedExpense] = useState<Partial<UmrahExpense>>(EMPTY_EXPENSE)
   const [printReport, setPrintReport] = useState(false)
-
-  const { data: campaignName } = useQuery({
-    queryKey: ['campaign-name', campaignId],
-    queryFn: async () => {
-      const { data } = await supabase.from('campaigns').select('*').eq('id', campaignId!).maybeSingle()
-      if (!data) return null
-      const row = data as Record<string, unknown>
-      return (row.name ?? row.name_ar ?? row.campaign_name ?? null) as string | null
-    },
-    enabled: !!campaignId,
-  })
 
   const { data: income = [], isLoading: incomeLoading } = useQuery({
     queryKey: ['umrah-income', tripId],
@@ -1617,14 +1637,12 @@ function FinanceTab({ tripId, trip }: { tripId: string; trip: UmrahTrip }) {
 
     {printReport && (
       <div id="umrah-finance-report-print" className="hidden print:block" dir="rtl">
+        <PrintCampaignHeader header={campaignPrintHeader} />
         <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '4px', color: '#000' }}>
           التقرير المالي — {trip.trip_name}
         </h1>
         <p style={{ fontSize: '13px', marginBottom: '2px', color: '#000' }}>تواريخ الرحلة: {tripDatesLabel}</p>
         <p style={{ fontSize: '13px', marginBottom: '2px', color: '#000' }}>تاريخ التقرير: {reportDate}</p>
-        {campaignName && (
-          <p style={{ fontSize: '13px', marginBottom: '2px', color: '#000' }}>الحملة: {campaignName}</p>
-        )}
         <hr style={{ margin: '12px 0', borderColor: '#000' }} />
 
         <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px', color: '#000' }}>الدخل</h2>
@@ -2264,7 +2282,7 @@ function invoiceStatus(inv: UmrahInvoice): { label: string; cls: string } {
   return { label: 'غير مدفوعة', cls: 'bg-gray-100 text-gray-600' }
 }
 
-function InvoicesTab({ tripId, tripName, enrolled }: { tripId: string; tripName: string; enrolled: UmrahTravellerTrip[] }) {
+function InvoicesTab({ tripId, tripName, enrolled, campaignPrintHeader }: { tripId: string; tripName: string; enrolled: UmrahTravellerTrip[]; campaignPrintHeader: string }) {
   const qc = useQueryClient()
   const [modal, setModal] = useState<'add' | 'edit' | null>(null)
   const [form, setForm] = useState<InvoiceForm>(EMPTY_INVOICE_FORM)
@@ -2686,7 +2704,8 @@ function InvoicesTab({ tripId, tripName, enrolled }: { tripId: string; tripName:
 
     {/* Print-only invoice */}
     {printInv && (
-      <div id="umrah-invoice-print" className="hidden print:block">
+      <div id="umrah-invoice-print" className="hidden print:block" dir="rtl">
+        <PrintCampaignHeader header={campaignPrintHeader} />
         <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>فاتورة</h1>
         <p style={{ fontSize: '13px', marginBottom: '4px' }}>رقم الفاتورة: {printInv.invoice_number ?? '—'}</p>
         <p style={{ fontSize: '13px', marginBottom: '4px' }}>التاريخ: {printInv.invoice_date ?? '—'}</p>
@@ -2797,7 +2816,7 @@ function manifestCell(m: UmrahManifestEntry, key: ManifestColumnKey): string {
   return m.notes || t?.notes || ''
 }
 
-function ManifestTab({ tripId, tripName }: { tripId: string; tripName: string }) {
+function ManifestTab({ tripId, tripName, campaignPrintHeader }: { tripId: string; tripName: string; campaignPrintHeader: string }) {
   const qc = useQueryClient()
   const [travellerSearch, setSearch] = useState('')
   const [showPicker, setShowPicker] = useState(false)
@@ -3083,6 +3102,7 @@ function ManifestTab({ tripId, tripName }: { tripId: string; tripName: string })
     {/* Print-only manifest sheet */}
     {printFilter && (
       <div id="umrah-manifest-print" className="hidden print:block" dir="rtl">
+        <PrintCampaignHeader header={campaignPrintHeader} />
         <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px', color: '#000' }}>{tripName}</h1>
         <p style={{ fontSize: '13px', marginBottom: '16px', color: '#000' }}>{printSubtitle}</p>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', color: '#000' }}>
