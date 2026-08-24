@@ -3,8 +3,8 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { ArrowRight, Users, UserPlus, UserMinus, Building2, ClipboardList, Plus, Edit2, Trash2, BedDouble, AlertTriangle, Printer, Wallet, Tag, FileText, ChevronDown, ChevronUp, Download, Bus, Plane } from 'lucide-react'
-import type { UmrahTrip, UmrahTraveller, UmrahTravellerTrip, UmrahHotel, UmrahManifestEntry, UmrahRoom, RoomType, UmrahIncome, UmrahExpense, UmrahExpenseCategory, UmrahTripPricing, UmrahPricingExpense, UmrahPricingExpenseRule, UmrahInvoice, UmrahInvoiceRoomType, UmrahTransport, UmrahTransportType } from '../types'
+import { ArrowRight, Users, UserPlus, UserMinus, Building2, ClipboardList, Plus, Edit2, Trash2, BedDouble, AlertTriangle, Printer, Wallet, Tag, FileText, ChevronDown, ChevronUp, Download, Bus, Plane, Columns3 } from 'lucide-react'
+import type { UmrahTrip, UmrahTraveller, UmrahTravellerTrip, UmrahHotel, UmrahManifestEntry, UmrahRoom, RoomType, UmrahIncome, UmrahExpense, UmrahExpenseCategory, UmrahTripPricing, UmrahPricingExpense, UmrahPricingExpenseRule, UmrahInvoice, UmrahInvoiceRoomType, UmrahTransport, UmrahTransportType, Gender } from '../types'
 import { ROOM_TYPE_AR, ROOM_TYPE_CAPACITY } from '../lib/roomTypes'
 import { useAuthStore } from '../store/authStore'
 
@@ -2739,6 +2739,64 @@ function InvoicesTab({ tripId, tripName, enrolled }: { tripId: string; tripName:
 type ManifestDraft = { seat_number: string; passport_number: string; notes: string }
 const EMPTY_MANIFEST_DRAFT: ManifestDraft = { seat_number: '', passport_number: '', notes: '' }
 
+type ManifestColumnKey =
+  | 'full_name_ar'
+  | 'full_name_en'
+  | 'passport_number'
+  | 'nationality'
+  | 'gender'
+  | 'phone'
+  | 'cpr_number'
+  | 'date_of_birth'
+  | 'seat_number'
+  | 'notes'
+
+const MANIFEST_COLUMNS: { key: ManifestColumnKey; label: string }[] = [
+  { key: 'full_name_ar',     label: 'الاسم بالعربي' },
+  { key: 'full_name_en',     label: 'الاسم بالإنجليزي' },
+  { key: 'passport_number',  label: 'رقم الجواز' },
+  { key: 'nationality',      label: 'الجنسية' },
+  { key: 'gender',           label: 'الجنس' },
+  { key: 'phone',            label: 'الهاتف' },
+  { key: 'cpr_number',       label: 'الرقم الشخصي' },
+  { key: 'date_of_birth',    label: 'تاريخ الميلاد' },
+  { key: 'seat_number',      label: 'رقم المقعد' },
+  { key: 'notes',            label: 'ملاحظات' },
+]
+
+const DEFAULT_MANIFEST_COLUMNS: Record<ManifestColumnKey, boolean> = {
+  full_name_ar: true,
+  full_name_en: false,
+  passport_number: true,
+  nationality: true,
+  gender: false,
+  phone: false,
+  cpr_number: false,
+  date_of_birth: false,
+  seat_number: true,
+  notes: false,
+}
+
+function manifestGenderLabel(g: Gender | null | undefined) {
+  if (g === 'male') return 'ذكر'
+  if (g === 'female') return 'أنثى'
+  return '—'
+}
+
+function manifestCell(m: UmrahManifestEntry, key: ManifestColumnKey): string {
+  const t = m.traveller
+  if (key === 'full_name_ar') return t?.full_name_ar || '—'
+  if (key === 'full_name_en') return t?.full_name_en || '—'
+  if (key === 'passport_number') return m.passport_number || t?.passport_number || '—'
+  if (key === 'nationality') return t?.nationality || '—'
+  if (key === 'gender') return manifestGenderLabel(t?.gender)
+  if (key === 'phone') return t?.phone || '—'
+  if (key === 'cpr_number') return t?.cpr_number || '—'
+  if (key === 'date_of_birth') return t?.date_of_birth || '—'
+  if (key === 'seat_number') return m.seat_number || '—'
+  return m.notes || t?.notes || ''
+}
+
 function ManifestTab({ tripId, tripName }: { tripId: string; tripName: string }) {
   const qc = useQueryClient()
   const [travellerSearch, setSearch] = useState('')
@@ -2747,6 +2805,8 @@ function ManifestTab({ tripId, tripName }: { tripId: string; tripName: string })
   const [draft, setDraft] = useState<ManifestDraft>(EMPTY_MANIFEST_DRAFT)
   const [editing, setEditing] = useState<UmrahManifestEntry | null>(null)
   const [printFilter, setPrintFilter] = useState<'all' | 'bahraini' | 'non-bahraini' | null>(null)
+  const [showColumnPicker, setShowColumnPicker] = useState(false)
+  const [selectedColumns, setSelectedColumns] = useState<Record<ManifestColumnKey, boolean>>(DEFAULT_MANIFEST_COLUMNS)
 
   const { data: manifest = [], isLoading } = useQuery({
     queryKey: ['umrah-manifest', tripId],
@@ -2835,6 +2895,7 @@ function ManifestTab({ tripId, tripName }: { tripId: string; tripName: string })
   })
 
   const printBtnCls = 'flex items-center gap-1 text-xs border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg disabled:opacity-40'
+  const visibleColumns = MANIFEST_COLUMNS.filter(c => selectedColumns[c.key])
 
   return (
     <>
@@ -2844,6 +2905,27 @@ function ManifestTab({ tripId, tripName }: { tripId: string; tripName: string })
           <ClipboardList size={15} /> المنافيست ({manifest.length})
         </h2>
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <button type="button" onClick={() => setShowColumnPicker(v => !v)} className={printBtnCls}>
+              <Columns3 size={12} /> الأعمدة
+              {showColumnPicker ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+            {showColumnPicker && (
+              <div className="absolute left-0 top-10 z-20 bg-white border border-gray-200 shadow-lg rounded-xl p-3 w-64 space-y-2">
+                <p className="text-xs font-semibold text-gray-600 mb-1">إظهار/إخفاء الأعمدة</p>
+                {MANIFEST_COLUMNS.map(col => (
+                  <label key={col.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedColumns[col.key]}
+                      onChange={e => setSelectedColumns(s => ({ ...s, [col.key]: e.target.checked }))}
+                    />
+                    <span>{col.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
           <button onClick={() => handlePrint('all')} disabled={manifest.length === 0} className={printBtnCls}>
             <Printer size={12} /> طباعة المنافيست
           </button>
@@ -2918,26 +3000,44 @@ function ManifestTab({ tripId, tripName }: { tripId: string; tripName: string })
       {isLoading ? (
         <p className="text-sm text-gray-400 py-4 text-center">جارٍ التحميل...</p>
       ) : (
-        <div className="divide-y divide-gray-50">
-          {manifest.map(m => (
-            <div key={m.id} className="flex items-center justify-between py-2.5 text-sm">
-              <div>
-                <span className="font-medium text-gray-800">{m.traveller?.full_name_ar ?? '—'}</span>
-                {m.seat_number && <span className="text-gray-400 text-xs mr-2">مقعد: {m.seat_number}</span>}
-                {m.passport_number && <span className="text-gray-400 text-xs mr-2 font-mono">{m.passport_number}</span>}
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setEditing(m)}
-                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
-                  <Edit2 size={14} />
-                </button>
-                <button onClick={() => window.confirm('حذف من المنافيست؟') && deleteEntry.mutate(m.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs font-medium text-gray-500">
+                <th className="text-right py-2 px-2 w-10">#</th>
+                {visibleColumns.map(col => (
+                  <th key={col.key} className="text-right py-2 px-2 whitespace-nowrap">{col.label}</th>
+                ))}
+                <th className="py-2 px-2 w-16" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {manifest.map((m, i) => (
+                <tr key={m.id} className="hover:bg-gray-50">
+                  <td className="py-2.5 px-2 text-gray-400">{i + 1}</td>
+                  {visibleColumns.map(col => (
+                    <td key={col.key} className={`py-2.5 px-2 text-gray-700 ${
+                      col.key === 'cpr_number' || col.key === 'phone' || col.key === 'passport_number' ? 'font-mono' : ''
+                    } ${col.key === 'full_name_ar' ? 'font-medium text-gray-800' : ''}`}>
+                      {manifestCell(m, col.key) || '—'}
+                    </td>
+                  ))}
+                  <td className="py-2.5 px-2">
+                    <div className="flex items-center gap-1 justify-end">
+                      <button onClick={() => setEditing(m)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                        <Edit2 size={14} />
+                      </button>
+                      <button onClick={() => window.confirm('حذف من المنافيست؟') && deleteEntry.mutate(m.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           {manifest.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">لا يوجد مسافرون في المنافيست</p>}
         </div>
       )}
@@ -2989,20 +3089,18 @@ function ManifestTab({ tripId, tripName }: { tripId: string; tripName: string })
           <thead>
             <tr>
               <th style={printTh}>#</th>
-              <th style={printTh}>الاسم</th>
-              <th style={printTh}>رقم الجواز</th>
-              <th style={printTh}>رقم المقعد</th>
-              <th style={printTh}>ملاحظات</th>
+              {visibleColumns.map(col => (
+                <th key={col.key} style={printTh}>{col.label}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {printRows.map((m, i) => (
               <tr key={m.id}>
                 <td style={printTd}>{i + 1}</td>
-                <td style={printTd}>{m.traveller?.full_name_ar ?? '—'}</td>
-                <td style={printTd}>{m.passport_number ?? m.traveller?.passport_number ?? '—'}</td>
-                <td style={printTd}>{m.seat_number ?? '—'}</td>
-                <td style={printTd}>{m.notes ?? ''}</td>
+                {visibleColumns.map(col => (
+                  <td key={col.key} style={printTd}>{manifestCell(m, col.key) || '—'}</td>
+                ))}
               </tr>
             ))}
           </tbody>
