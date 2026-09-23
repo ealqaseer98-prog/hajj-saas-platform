@@ -1,9 +1,10 @@
 // src/pages/PreRegistrationPage.tsx
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { Plus, Edit2, Trash2, Search, FileDown } from 'lucide-react'
+import { Plus, Edit2, Trash2, Search, FileDown, ScanLine } from 'lucide-react'
 import type { PreRegistration, HajjType, AdminReferral } from '../types'
+import { scanPassportFile, SCAN_PASSPORT_ERROR_AR } from '../lib/scanPassport'
 
 type PreRegForm = {
   full_name_ar: string
@@ -54,6 +55,9 @@ export default function PreRegistrationPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<PreRegForm>(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState('')
+  const scanFileRef = useRef<HTMLInputElement>(null)
 
   const { data: entries = [], isLoading, error } = useQuery({
     queryKey: ['pre-registrations', search],
@@ -74,6 +78,7 @@ export default function PreRegistrationPage() {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setFormError('')
+    setScanError('')
     setModalOpen(true)
   }
 
@@ -89,6 +94,7 @@ export default function PreRegistrationPage() {
       admin_referral: row.admin_referral ?? '',
     })
     setFormError('')
+    setScanError('')
     setModalOpen(true)
   }
 
@@ -97,6 +103,25 @@ export default function PreRegistrationPage() {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setFormError('')
+    setScanError('')
+  }
+
+  const handleScanPassport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setScanError('')
+    setScanning(true)
+    try {
+      const scanned = await scanPassportFile(file)
+      if (scanned.full_name_ar) {
+        setForm(f => ({ ...f, full_name_ar: scanned.full_name_ar! }))
+      }
+    } catch {
+      setScanError(SCAN_PASSPORT_ERROR_AR)
+    } finally {
+      setScanning(false)
+    }
   }
 
   const saveEntry = useMutation({
@@ -367,6 +392,21 @@ export default function PreRegistrationPage() {
             <h2 className="text-lg font-bold text-gray-800 border-b border-gray-100 pb-2">
               {editingId ? 'تعديل تسجيل مسبق' : 'إضافة تسجيل مسبق'}
             </h2>
+
+            <div>
+              <input ref={scanFileRef} type="file" accept="image/*" className="hidden" onChange={handleScanPassport} />
+              <button type="button" onClick={() => scanFileRef.current?.click()}
+                disabled={scanning || saveEntry.isPending}
+                className="flex items-center justify-center gap-2 w-full border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
+                <ScanLine size={16} />
+                {scanning ? 'جاري قراءة الجواز...' : 'مسح جواز السفر'}
+              </button>
+              {scanError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-2">
+                  {scanError}
+                </p>
+              )}
+            </div>
 
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">الاسم بالعربية *</label>

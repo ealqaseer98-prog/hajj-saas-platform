@@ -1,12 +1,24 @@
 // src/pages/TravellersPage.tsx
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import { canManageTravellers } from '../lib/permissions'
-import { Search, Plus, Edit2, Trash2, Eye, UserCheck, AlertCircle } from 'lucide-react'
+import { Search, Plus, Edit2, Trash2, Eye, UserCheck, AlertCircle, ScanLine } from 'lucide-react'
 import type { Traveller, VisaStatus, PackageType, Gender } from '../types'
+import { findRowByPassport, scanPassportFile, SCAN_PASSPORT_ERROR_AR, type ScannedPassport } from '../lib/scanPassport'
+
+function applyScannedToTraveller(current: Partial<Traveller>, scanned: ScannedPassport): Partial<Traveller> {
+  const next = { ...current }
+  if (scanned.full_name_ar) next.full_name_ar = scanned.full_name_ar
+  if (scanned.full_name_en) next.full_name_en = scanned.full_name_en
+  if (scanned.passport_number) next.passport_number = scanned.passport_number
+  if (scanned.nationality) next.nationality = scanned.nationality
+  if (scanned.date_of_birth) next.date_of_birth = scanned.date_of_birth.slice(0, 10)
+  if (scanned.gender === 'male' || scanned.gender === 'female') next.gender = scanned.gender
+  return next
+}
 
 const VISA_LABELS: Record<VisaStatus, { label: string; className: string }> = {
   pending:  { label: 'في الانتظار', className: 'bg-yellow-100 text-yellow-800' },
@@ -509,6 +521,22 @@ export default function TravellersPage() {
           onSave={() => save.mutate(selected)}
           onClose={() => { setModal(null); setSelected(EMPTY) }}
           saving={save.isPending} error={save.error?.message}
+          onScanned={async scanned => {
+            const existing = scanned.passport_number
+              ? await findRowByPassport<Traveller>('travellers', scanned.passport_number, selected.id)
+              : null
+            if (existing) {
+              const updateExisting = window.confirm(
+                'يوجد حاج مسجّل بنفس رقم الجواز. هل تريد تحديث بياناته بدلاً من إضافة حاج جديد؟'
+              )
+              if (updateExisting) {
+                setModal('edit')
+                setSelected(applyScannedToTraveller({ ...existing, gender: normalizeGender(existing.gender) }, scanned))
+                return
+              }
+            }
+            setSelected(s => applyScannedToTraveller(s, scanned))
+          }}
         />
       )}
     </div>
@@ -520,9 +548,14 @@ interface ModalProps {
   onChange: (t: Partial<Traveller>) => void
   onSave: () => void; onClose: () => void
   saving: boolean; error?: string
+  onScanned: (fields: ScannedPassport) => Promise<void>
 }
 
-function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }: ModalProps) {
+function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error, onScanned }: ModalProps) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
+
   const f = (field: keyof Traveller) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       onChange({ ...data, [field]: e.target.value })
@@ -532,12 +565,42 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error }
     onChange({ ...data, gender: value === '' ? null : (value as Gender) })
   }
 
+  const handleScanFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setScanError(null)
+    setScanning(true)
+    try {
+      await onScanned(await scanPassportFile(file))
+    } catch {
+      setScanError(SCAN_PASSPORT_ERROR_AR)
+    } finally {
+      setScanning(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" dir="rtl">
         <h2 className="text-lg font-bold text-gray-800">
           {mode === 'add' ? '➕ إضافة حاج جديد' : '✏️ تعديل بيانات الحاج'}
         </h2>
+
+        <div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleScanFile} />
+          <button type="button" onClick={() => fileRef.current?.click()}
+            disabled={scanning || saving}
+            className="flex items-center justify-center gap-2 w-full border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
+            <ScanLine size={16} />
+            {scanning ? 'جاري قراءة الجواز...' : 'مسح جواز السفر'}
+          </button>
+          {scanError && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2 mt-2">
+              <AlertCircle size={15} /> {scanError}
+            </div>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="الاسم بالعربية *" required>
