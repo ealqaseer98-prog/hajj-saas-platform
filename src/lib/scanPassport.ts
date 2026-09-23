@@ -5,10 +5,18 @@ export type ScannedPassport = {
   full_name_en?: string | null
   full_name_ar?: string | null
   passport_number?: string | null
+  cpr_number?: string | null
   nationality?: string | null
   date_of_birth?: string | null
   gender?: string | null
   expiry_date?: string | null
+  passport_issue_date?: string | null
+  passport_expiry_date?: string | null
+}
+
+export function dateOrNull(value: string | null | undefined): string | null {
+  const v = (value ?? '').trim()
+  return v ? v.slice(0, 10) : null
 }
 
 export const SCAN_PASSPORT_ERROR_AR =

@@ -28,6 +28,7 @@ export interface Traveller {
   passport_number: string | null
   passport_issue_date: string | null
   passport_expiry: string | null
+  passport_expiry_date: string | null
   nationality:     string
   date_of_birth:   string | null
   visa_status:     VisaStatus
@@ -260,13 +261,15 @@ export interface UmrahTraveller {
   full_name_ar:    string
   full_name_en:    string | null
   cpr_number:      string | null
-  passport_number: string | null
-  phone:           string | null
-  gender:          Gender | null
-  date_of_birth:   string | null
-  nationality:     string | null
-  notes:           string | null
-  created_at:      string
+  passport_number:      string | null
+  passport_issue_date:  string | null
+  passport_expiry_date: string | null
+  phone:                string | null
+  gender:               Gender | null
+  date_of_birth:        string | null
+  nationality:          string | null
+  notes:                string | null
+  created_at:           string
 }
 
 export interface UmrahTravellerTrip {

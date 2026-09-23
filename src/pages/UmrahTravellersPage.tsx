@@ -10,9 +10,12 @@ type ScannedPassport = {
   full_name_en?: string | null
   full_name_ar?: string | null
   passport_number?: string | null
+  cpr_number?: string | null
   nationality?: string | null
   date_of_birth?: string | null
   gender?: string | null
+  passport_issue_date?: string | null
+  passport_expiry_date?: string | null
 }
 
 function normalizePassport(value: string | null | undefined) {
@@ -24,9 +27,12 @@ function applyScannedFields(current: Partial<UmrahTraveller>, scanned: ScannedPa
   if (scanned.full_name_ar) next.full_name_ar = scanned.full_name_ar
   if (scanned.full_name_en) next.full_name_en = scanned.full_name_en
   if (scanned.passport_number) next.passport_number = scanned.passport_number
+  if (scanned.cpr_number) next.cpr_number = scanned.cpr_number
   if (scanned.nationality) next.nationality = scanned.nationality
   if (scanned.date_of_birth) next.date_of_birth = scanned.date_of_birth.slice(0, 10)
   if (scanned.gender === 'male' || scanned.gender === 'female') next.gender = scanned.gender
+  if (scanned.passport_issue_date) next.passport_issue_date = scanned.passport_issue_date.slice(0, 10)
+  if (scanned.passport_expiry_date) next.passport_expiry_date = scanned.passport_expiry_date.slice(0, 10)
   return next
 }
 
@@ -69,6 +75,8 @@ function buildSavePayload(t: Partial<UmrahTraveller>) {
     full_name_en: t.full_name_en || null,
     cpr_number: t.cpr_number || null,
     passport_number: t.passport_number || null,
+    passport_issue_date: t.passport_issue_date || null,
+    passport_expiry_date: t.passport_expiry_date || null,
     phone: t.phone || null,
     gender: t.gender ?? null,
     date_of_birth: t.date_of_birth || null,
@@ -354,6 +362,12 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error, 
           </Field>
           <Field label="رقم جواز السفر">
             <input className={ic} value={data.passport_number ?? ''} onChange={f('passport_number')} dir="ltr" />
+          </Field>
+          <Field label="تاريخ إصدار الجواز">
+            <input className={ic} type="date" value={data.passport_issue_date ?? ''} onChange={f('passport_issue_date')} />
+          </Field>
+          <Field label="تاريخ انتهاء الجواز">
+            <input className={ic} type="date" value={data.passport_expiry_date ?? ''} onChange={f('passport_expiry_date')} />
           </Field>
           <Field label="تاريخ الميلاد">
             <input className={ic} type="date" value={data.date_of_birth ?? ''} onChange={f('date_of_birth')} />

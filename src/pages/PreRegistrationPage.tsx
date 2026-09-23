@@ -114,9 +114,11 @@ export default function PreRegistrationPage() {
     setScanning(true)
     try {
       const scanned = await scanPassportFile(file)
-      if (scanned.full_name_ar) {
-        setForm(f => ({ ...f, full_name_ar: scanned.full_name_ar! }))
-      }
+      setForm(f => ({
+        ...f,
+        ...(scanned.full_name_ar ? { full_name_ar: scanned.full_name_ar } : {}),
+        ...(scanned.cpr_number ? { cpr_number: scanned.cpr_number } : {}),
+      }))
     } catch {
       setScanError(SCAN_PASSPORT_ERROR_AR)
     } finally {

@@ -7,16 +7,23 @@ import { useAuthStore } from '../store/authStore'
 import { canManageTravellers } from '../lib/permissions'
 import { Search, Plus, Edit2, Trash2, Eye, UserCheck, AlertCircle, ScanLine } from 'lucide-react'
 import type { Traveller, VisaStatus, PackageType, Gender } from '../types'
-import { findRowByPassport, scanPassportFile, SCAN_PASSPORT_ERROR_AR, type ScannedPassport } from '../lib/scanPassport'
+import { findRowByPassport, scanPassportFile, SCAN_PASSPORT_ERROR_AR, dateOrNull, type ScannedPassport } from '../lib/scanPassport'
 
 function applyScannedToTraveller(current: Partial<Traveller>, scanned: ScannedPassport): Partial<Traveller> {
   const next = { ...current }
   if (scanned.full_name_ar) next.full_name_ar = scanned.full_name_ar
   if (scanned.full_name_en) next.full_name_en = scanned.full_name_en
   if (scanned.passport_number) next.passport_number = scanned.passport_number
+  if (scanned.cpr_number) next.cpr_number = scanned.cpr_number
   if (scanned.nationality) next.nationality = scanned.nationality
   if (scanned.date_of_birth) next.date_of_birth = scanned.date_of_birth.slice(0, 10)
   if (scanned.gender === 'male' || scanned.gender === 'female') next.gender = scanned.gender
+  if (scanned.passport_issue_date) next.passport_issue_date = scanned.passport_issue_date.slice(0, 10)
+  if (scanned.passport_expiry_date) {
+    const expiry = scanned.passport_expiry_date.slice(0, 10)
+    next.passport_expiry_date = expiry
+    next.passport_expiry = expiry
+  }
   return next
 }
 
@@ -66,10 +73,11 @@ function buildSavePayload(t: Partial<Traveller>) {
     phone: t.phone ?? null,
     email: t.email ?? null,
     passport_number: t.passport_number ?? null,
-    passport_issue_date: t.passport_issue_date ?? null,
-    passport_expiry: t.passport_expiry ?? null,
+    passport_issue_date: dateOrNull(t.passport_issue_date),
+    passport_expiry_date: dateOrNull(t.passport_expiry_date ?? t.passport_expiry),
+    passport_expiry: dateOrNull(t.passport_expiry_date ?? t.passport_expiry),
     nationality: t.nationality ?? 'بحريني',
-    date_of_birth: t.date_of_birth ?? null,
+    date_of_birth: dateOrNull(t.date_of_birth),
     visa_status: t.visa_status ?? 'pending',
     notes: t.notes ?? null,
   }
@@ -635,7 +643,7 @@ function TravellerModal({ mode, data, onChange, onSave, onClose, saving, error, 
             <input className={ic} type="date" value={data.passport_issue_date ?? ''} onChange={f('passport_issue_date')} />
           </Field>
           <Field label="تاريخ انتهاء الجواز">
-            <input className={ic} type="date" value={data.passport_expiry ?? ''} onChange={f('passport_expiry')} />
+            <input className={ic} type="date" value={data.passport_expiry_date ?? data.passport_expiry ?? ''} onChange={f('passport_expiry_date')} />
           </Field>
           <Field label="تاريخ الميلاد">
             <input className={ic} type="date" value={data.date_of_birth ?? ''} onChange={f('date_of_birth')} />
