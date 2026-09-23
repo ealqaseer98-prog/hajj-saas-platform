@@ -52,7 +52,7 @@ export default async function handler(req: any, res: any) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
         max_tokens: 1024,
         messages: [
           {
