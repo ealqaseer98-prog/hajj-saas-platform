@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Passport Scan Test</title>
+  <style>
+    body { font-family: sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+    button { margin-top: 12px; padding: 8px 16px; }
+    pre { margin-top: 16px; padding: 12px; background: #f4f4f4; white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <h1>Passport Scan Test</h1>
+  <input id="file" type="file" accept="image/*" />
+  <br />
+  <button id="scan" type="button">Scan Passport</button>
+  <pre id="result">No result yet.</pre>
+
+  <script>
+    function fileToBase64(file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader()
+        reader.onload = function () {
+          var dataUrl = String(reader.result || '')
+          var comma = dataUrl.indexOf(',')
+          var base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl.replace(/^data:[^;]+;base64,/, '')
+          resolve(base64)
+        }
+        reader.onerror = function () { reject(new Error('Failed to read image')) }
+        reader.readAsDataURL(file)
+      })
+    }
+
+    document.getElementById('scan').addEventListener('click', async function () {
+      var resultEl = document.getElementById('result')
+      var file = document.getElementById('file').files[0]
+      if (!file) {
+        resultEl.textContent = 'Select an image first.'
+        return
+      }
+
+      resultEl.textContent = 'Scanning…'
+      try {
+        var base64 = await fileToBase64(file)
+        var mediaType = file.type || 'image/jpeg'
+        var res = await fetch('/api/scan-passport', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64, mediaType: mediaType }),
+        })
+        var data = await res.json().catch(function () { return { error: 'Non-JSON response', status: res.status } })
+        resultEl.textContent = JSON.stringify(data, null, 2)
+      } catch (err) {
+        resultEl.textContent = JSON.stringify({ success: false, error: err.message || String(err) }, null, 2)
+      }
+    })
+  </script>
+</body>
+</html>
