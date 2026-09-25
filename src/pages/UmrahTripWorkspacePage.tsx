@@ -1769,9 +1769,9 @@ function FinanceTab({ tripId, trip, campaign }: { tripId: string; trip: UmrahTri
 
     {printReport && (
       <style>{`
-        @page { margin: 0.5in; }
+        @page { margin: 0.4in; }
         @media print {
-          @page { margin: 0.5in; }
+          @page { margin: 0.4in; }
           body * { visibility: hidden; }
           #umrah-finance-report-print, #umrah-finance-report-print * { visibility: visible; }
           #umrah-finance-report-print { position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #000; }
@@ -2487,7 +2487,7 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
     if (!printInv) return
     let cancelled = false
     const prevTitle = document.title
-    applyDocumentTitle(printCampaign?.campaign_name_ar)
+    applyDocumentTitle((printCampaign ?? campaign)?.campaign_name_ar)
     const clear = () => {
       document.title = prevTitle
       setPrintInv(null)
@@ -2495,7 +2495,7 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
     }
     window.addEventListener('afterprint', clear)
     void (async () => {
-      await waitForLogo(printCampaign?.logo_url)
+      await waitForLogo((printCampaign ?? campaign)?.logo_url)
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
       if (!cancelled) window.print()
     })()
@@ -2508,15 +2508,16 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
   const handlePrint = async (inv: UmrahInvoice) => {
     let row: CampaignPrintRow | null = campaign
     try {
-      row = await qc.fetchQuery({
+      const fetched = await qc.fetchQuery({
         queryKey: CAMPAIGN_PRINT_QUERY_KEY,
         queryFn: fetchCampaignPrintRow,
         staleTime: 0,
       })
+      if (fetched) row = fetched
     } catch {
       row = campaign
     }
-    setPrintCampaign(row ?? null)
+    setPrintCampaign(row ?? campaign ?? null)
     setPrintInv(inv)
   }
 
@@ -2786,9 +2787,37 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
     </div>
 
     {/* Print-only invoice */}
-    {printInv && (
+    {printInv && (() => {
+      const c = printCampaign ?? campaign
+      const logoUrl = (c?.logo_url ?? '').trim()
+      const name = (c?.campaign_name_ar ?? '').trim()
+      const license = (c?.license_number ?? '').trim()
+      const dates = tripDatesLine(departureDate, returnDate)
+      return (
       <div id="umrah-invoice-print" className="hidden print:block" dir="rtl">
-        <PrintCampaignHeader campaign={printCampaign} departureDate={departureDate} returnDate={returnDate} />
+        <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt=""
+              style={{
+                maxHeight: '72px',
+                maxWidth: '220px',
+                objectFit: 'contain',
+                display: 'block',
+                margin: '0 auto 8px',
+              }}
+            />
+          ) : null}
+          {name ? (
+            <p style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 4px', color: '#000' }}>
+              {name}{license ? ` - رقم الرخصة ${license}` : ''}
+            </p>
+          ) : null}
+          {dates ? (
+            <p style={{ fontSize: '13px', margin: 0, color: '#000' }}>{dates}</p>
+          ) : null}
+        </div>
         <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>فاتورة</h1>
         <p style={{ fontSize: '13px', marginBottom: '4px' }}>رقم الفاتورة: {printInv.invoice_number ?? '—'}</p>
         <p style={{ fontSize: '13px', marginBottom: '4px' }}>التاريخ: {printInv.invoice_date ?? '—'}</p>
@@ -2821,16 +2850,25 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
           <p>المتبقي: {Math.max(0, invoiceTotal(printInv) - invoicePaid(printInv)).toFixed(3)} BHD</p>
         </div>
       </div>
-    )}
+      )
+    })()}
 
     {printInv && (
       <style>{`
-        @page { margin: 0.5in; }
+        @page { margin: 0.4in; }
         @media print {
-          @page { margin: 0.5in; }
+          @page { margin: 0.4in; }
           body * { visibility: hidden; }
           #umrah-invoice-print, #umrah-invoice-print * { visibility: visible; }
-          #umrah-invoice-print { position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #000; }
+          #umrah-invoice-print {
+            display: block !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            background: #fff;
+            color: #000;
+          }
         }
       `}</style>
     )}
@@ -3229,9 +3267,9 @@ function ManifestTab({ tripId, tripName, departureDate, returnDate, campaign }: 
 
     {printFilter && (
       <style>{`
-        @page { margin: 0.5in; }
+        @page { margin: 0.4in; }
         @media print {
-          @page { margin: 0.5in; }
+          @page { margin: 0.4in; }
           body * { visibility: hidden; }
           #umrah-manifest-print, #umrah-manifest-print * { visibility: visible; }
           #umrah-manifest-print { position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #000; }
