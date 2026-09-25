@@ -2517,15 +2517,22 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
   }, [printInv, printCampaign])
 
   const handlePrint = async (inv: UmrahInvoice) => {
+    console.log('[umrah-invoice-print] handlePrint start', inv)
     let row: CampaignPrintRow | null = null
     try {
       row = await fetchCampaignPrintRow()
-    } catch {
+      console.log('[umrah-invoice-print] fetchCampaignPrintRow row', row)
+    } catch (err) {
+      console.log('[umrah-invoice-print] fetchCampaignPrintRow error', err)
       row = null
     }
-    if (!row) row = campaign
+    if (!row) {
+      console.log('[umrah-invoice-print] row null, falling back to campaign prop', campaign)
+      row = campaign
+    }
     setPrintCampaign(row)
     setPrintInv(inv)
+    console.log('[umrah-invoice-print] after setState', { row, printInv: inv })
   }
 
   const updateLine = (key: string, patch: Partial<InvoiceLineDraft>) => {
