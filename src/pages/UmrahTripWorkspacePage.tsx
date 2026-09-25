@@ -2484,10 +2484,10 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
   })
 
   useEffect(() => {
-    if (!printInv) return
+    if (!printInv || !printCampaign) return
     let cancelled = false
     const prevTitle = document.title
-    applyDocumentTitle((printCampaign ?? campaign)?.campaign_name_ar)
+    applyDocumentTitle(printCampaign.campaign_name_ar)
     const clear = () => {
       document.title = prevTitle
       setPrintInv(null)
@@ -2495,8 +2495,13 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
     }
     window.addEventListener('afterprint', clear)
     void (async () => {
-      await waitForLogo((printCampaign ?? campaign)?.logo_url)
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+      await waitForLogo(printCampaign.logo_url)
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve())
+        })
+      })
+      await new Promise(resolve => setTimeout(resolve, 0))
       if (!cancelled) window.print()
     })()
     return () => {
@@ -2506,18 +2511,14 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
   }, [printInv, printCampaign])
 
   const handlePrint = async (inv: UmrahInvoice) => {
-    let row: CampaignPrintRow | null = campaign
+    let row: CampaignPrintRow | null = null
     try {
-      const fetched = await qc.fetchQuery({
-        queryKey: CAMPAIGN_PRINT_QUERY_KEY,
-        queryFn: fetchCampaignPrintRow,
-        staleTime: 0,
-      })
-      if (fetched) row = fetched
+      row = await fetchCampaignPrintRow()
     } catch {
-      row = campaign
+      row = null
     }
-    setPrintCampaign(row ?? campaign ?? null)
+    if (!row) row = campaign
+    setPrintCampaign(row)
     setPrintInv(inv)
   }
 
