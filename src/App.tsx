@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
-import { applyDocumentTitle, fetchCampaignPrintRow } from './lib/campaignPrint'
+import { applyDocumentTitle, CAMPAIGN_PRINT_QUERY_KEY, fetchCampaignPrintRow } from './lib/campaignPrint'
 import {
   isPathBlockedForCoordinator,
   isPathAllowedForDriver,
@@ -151,8 +151,8 @@ function RoleGuardedOutlet() {
 function CampaignDocumentTitle() {
   const user = useAuthStore(s => s.user)
   const { data } = useQuery({
-    queryKey: ['campaign-print-header'],
-    queryFn: () => fetchCampaignPrintRow(),
+    queryKey: CAMPAIGN_PRINT_QUERY_KEY,
+    queryFn: fetchCampaignPrintRow,
     enabled: !!user,
   })
   useEffect(() => {
