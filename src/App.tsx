@@ -1,8 +1,9 @@
 // src/App.tsx
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { useAuthStore } from './store/authStore'
+import { applyDocumentTitle, fetchCampaignPrintRow } from './lib/campaignPrint'
 import {
   isPathBlockedForCoordinator,
   isPathAllowedForDriver,
@@ -147,6 +148,19 @@ function RoleGuardedOutlet() {
   )
 }
 
+function CampaignDocumentTitle() {
+  const user = useAuthStore(s => s.user)
+  const { data } = useQuery({
+    queryKey: ['campaign-print-header'],
+    queryFn: () => fetchCampaignPrintRow(),
+    enabled: !!user,
+  })
+  useEffect(() => {
+    applyDocumentTitle(data?.campaign_name_ar)
+  }, [data])
+  return null
+}
+
 export default function App() {
   const restoreSession = useAuthStore(s => s.restoreSession)
   const [checking, setChecking] = useState(true)
@@ -167,6 +181,7 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <CampaignDocumentTitle />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
