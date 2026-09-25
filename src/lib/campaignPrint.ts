@@ -55,10 +55,18 @@ export function waitForLogo(logoUrl: string | null | undefined): Promise<void> {
   const src = (logoUrl ?? '').trim()
   if (!src) return Promise.resolve()
   return new Promise(resolve => {
+    let settled = false
+    const done = () => {
+      if (settled) return
+      settled = true
+      resolve()
+    }
     const img = new Image()
-    img.onload = () => resolve()
-    img.onerror = () => resolve()
+    img.onload = done
+    img.onerror = done
     img.src = src
+    if (img.complete) done()
+    setTimeout(done, 2000)
   })
 }
 

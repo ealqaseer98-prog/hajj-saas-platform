@@ -2484,7 +2484,10 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
   })
 
   useEffect(() => {
-    if (!printInv || !printCampaign) return
+    if (!printInv || !printCampaign) {
+      console.log('[umrah-invoice-print] skip effect', { printInv: !!printInv, printCampaign })
+      return
+    }
     let cancelled = false
     const prevTitle = document.title
     applyDocumentTitle(printCampaign.campaign_name_ar)
@@ -2495,13 +2498,16 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
     }
     window.addEventListener('afterprint', clear)
     void (async () => {
+      console.log('[umrah-invoice-print] waiting for logo', printCampaign.logo_url)
       await waitForLogo(printCampaign.logo_url)
+      console.log('[umrah-invoice-print] waitForLogo resolved')
       await new Promise<void>(resolve => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => resolve())
         })
       })
       await new Promise(resolve => setTimeout(resolve, 0))
+      console.log('[umrah-invoice-print] calling window.print()', { cancelled, campaign: printCampaign })
       if (!cancelled) window.print()
     })()
     return () => {
