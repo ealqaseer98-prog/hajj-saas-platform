@@ -72,25 +72,73 @@ function parseInputNum(raw: string): number | undefined {
   return Number.isNaN(n) ? undefined : n
 }
 
-type CampaignPrintHeader = { text: string; logoUrl: string | null }
+type CampaignPrintRow = {
+  campaign_name_ar: string | null
+  license_number: string | null
+  logo_url: string | null
+}
+
+type CampaignPrintHeader = {
+  name: string
+  license: string
+  text: string
+  logoUrl: string | null
+  isReady: boolean
+}
+
+async function resolveCampaignId(): Promise<string | null> {
+  const fromStore = useAuthStore.getState().user?.campaign_id
+  if (fromStore) return fromStore
+
+  const { data: sessionData } = await supabase.auth.getSession()
+  const fromJwt = sessionData.session?.user.app_metadata?.campaign_id as string | undefined
+  if (fromJwt) return fromJwt
+
+  const userId = sessionData.session?.user.id ?? useAuthStore.getState().user?.id
+  if (!userId) return null
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('campaign_id')
+    .eq('id', userId)
+    .maybeSingle()
+  return (profile?.campaign_id as string | undefined) ?? null
+}
+
+async function fetchCampaignPrintRow(): Promise<CampaignPrintRow | null> {
+  const campaignId = await resolveCampaignId()
+  if (campaignId) {
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('campaign_name_ar, license_number, logo_url')
+      .eq('id', campaignId)
+      .maybeSingle()
+    if (error) throw error
+    if (data) return data as CampaignPrintRow
+  }
+
+  const { data, error } = await supabase
+    .from('campaigns')
+    .select('campaign_name_ar, license_number, logo_url')
+    .limit(1)
+  if (error) throw error
+  return (data?.[0] ?? null) as CampaignPrintRow | null
+}
+
+function waitForLogo(logoUrl: string | null): Promise<void> {
+  if (!logoUrl) return Promise.resolve()
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => resolve()
+    img.onerror = () => resolve()
+    img.src = logoUrl
+  })
+}
 
 function useCampaignPrintHeader(): CampaignPrintHeader {
-  const campaignId = useAuthStore(s => s.user?.campaign_id)
-  const { data } = useQuery({
-    queryKey: ['campaign-print-header', campaignId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('campaigns')
-        .select('campaign_name_ar, license_number, logo_url')
-        .eq('id', campaignId!)
-        .maybeSingle()
-      return (data ?? null) as {
-        campaign_name_ar: string | null
-        license_number: string | null
-        logo_url: string | null
-      } | null
-    },
-    enabled: !!campaignId,
+  const { data, isFetched } = useQuery({
+    queryKey: ['campaign-print-header'],
+    queryFn: fetchCampaignPrintRow,
   })
   const name = (data?.campaign_name_ar ?? '').trim()
   const license = (data?.license_number ?? '').trim()
@@ -98,22 +146,37 @@ function useCampaignPrintHeader(): CampaignPrintHeader {
   const text = !name ? '' : !license ? name : `${name} - رخصة رقم ${license}`
 
   useEffect(() => {
-    if (!logoUrl) return
-    const img = new Image()
-    img.src = logoUrl
+    void waitForLogo(logoUrl)
   }, [logoUrl])
 
-  return { text, logoUrl }
+  return { name, license, text, logoUrl, isReady: isFetched }
 }
 
-function PrintCampaignHeader({ header }: { header: CampaignPrintHeader }) {
-  const logoUrl = header.logoUrl
-  if (!logoUrl && !header.text) return null
+function tripDatesLine(departureDate?: string | null, returnDate?: string | null) {
+  const dep = (departureDate ?? '').trim()
+  const ret = (returnDate ?? '').trim()
+  if (dep && ret) return `تاريخ الرحلة: ${dep} - ${ret}`
+  if (dep) return `تاريخ الرحلة: ${dep}`
+  if (ret) return `تاريخ الرحلة: ${ret}`
+  return ''
+}
+
+function PrintCampaignHeader({
+  header,
+  departureDate,
+  returnDate,
+}: {
+  header: CampaignPrintHeader
+  departureDate?: string | null
+  returnDate?: string | null
+}) {
+  const dates = tripDatesLine(departureDate, returnDate)
+  if (!header.logoUrl && !header.text && !dates) return null
   return (
     <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-      {logoUrl && (
+      {header.logoUrl && (
         <img
-          src={logoUrl}
+          src={header.logoUrl}
           alt=""
           style={{
             maxHeight: '72px',
@@ -125,9 +188,12 @@ function PrintCampaignHeader({ header }: { header: CampaignPrintHeader }) {
         />
       )}
       {header.text ? (
-        <p style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#000' }}>
+        <p style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 4px', color: '#000' }}>
           {header.text}
         </p>
+      ) : null}
+      {dates ? (
+        <p style={{ fontSize: '13px', margin: 0, color: '#000' }}>{dates}</p>
       ) : null}
     </div>
   )
@@ -207,10 +273,10 @@ export default function UmrahTripWorkspacePage() {
       {activeTab === 'hotels'       && <HotelsTab tripId={id} />}
       {activeTab === 'rooms'        && <RoomsTab tripId={id} enrolled={enrolled} />}
       {activeTab === 'distribution' && <DistributionTab tripId={id} enrolled={enrolled} />}
-      {activeTab === 'manifest'     && <ManifestTab tripId={id} tripName={trip.trip_name} campaignPrintHeader={campaignPrintHeader} />}
+      {activeTab === 'manifest'     && <ManifestTab tripId={id} tripName={trip.trip_name} departureDate={trip.departure_date} returnDate={trip.return_date} campaignPrintHeader={campaignPrintHeader} />}
       {activeTab === 'finance'      && <FinanceTab tripId={id} trip={trip} campaignPrintHeader={campaignPrintHeader} />}
       {activeTab === 'pricing'      && <PricingTab tripId={id} />}
-      {activeTab === 'invoices'     && <InvoicesTab tripId={id} tripName={trip.trip_name} enrolled={enrolled} campaignPrintHeader={campaignPrintHeader} />}
+      {activeTab === 'invoices'     && <InvoicesTab tripId={id} tripName={trip.trip_name} departureDate={trip.departure_date} returnDate={trip.return_date} enrolled={enrolled} campaignPrintHeader={campaignPrintHeader} />}
     </div>
   )
 }
@@ -1415,18 +1481,25 @@ function FinanceTab({ tripId, trip, campaignPrintHeader }: { tripId: string; tri
   ].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || b.id.localeCompare(a.id))
 
   const reportDate = new Date().toISOString().slice(0, 10)
-  const tripDatesLabel = [trip.departure_date, trip.return_date].filter(Boolean).join(' → ') || '—'
-
   useEffect(() => {
     if (!printReport) return
+    let cancelled = false
     const clear = () => setPrintReport(false)
     window.addEventListener('afterprint', clear)
-    return () => window.removeEventListener('afterprint', clear)
-  }, [printReport])
+    void (async () => {
+      const row = await qc.ensureQueryData({ queryKey: ['campaign-print-header'], queryFn: fetchCampaignPrintRow })
+      await waitForLogo((row?.logo_url ?? '').trim() || null)
+      await new Promise(r => setTimeout(r, 80))
+      if (!cancelled) window.print()
+    })()
+    return () => {
+      cancelled = true
+      window.removeEventListener('afterprint', clear)
+    }
+  }, [printReport, qc])
 
   const handlePrintReport = () => {
     setPrintReport(true)
-    setTimeout(() => window.print(), 50)
   }
 
   return (
@@ -1676,11 +1749,10 @@ function FinanceTab({ tripId, trip, campaignPrintHeader }: { tripId: string; tri
 
     {printReport && (
       <div id="umrah-finance-report-print" className="hidden print:block" dir="rtl">
-        <PrintCampaignHeader header={campaignPrintHeader} />
+        <PrintCampaignHeader header={campaignPrintHeader} departureDate={trip.departure_date} returnDate={trip.return_date} />
         <h1 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '4px', color: '#000' }}>
           التقرير المالي — {trip.trip_name}
         </h1>
-        <p style={{ fontSize: '13px', marginBottom: '2px', color: '#000' }}>تواريخ الرحلة: {tripDatesLabel}</p>
         <p style={{ fontSize: '13px', marginBottom: '2px', color: '#000' }}>تاريخ التقرير: {reportDate}</p>
         <hr style={{ margin: '12px 0', borderColor: '#000' }} />
 
@@ -2321,7 +2393,7 @@ function invoiceStatus(inv: UmrahInvoice): { label: string; cls: string } {
   return { label: 'غير مدفوعة', cls: 'bg-gray-100 text-gray-600' }
 }
 
-function InvoicesTab({ tripId, tripName, enrolled, campaignPrintHeader }: { tripId: string; tripName: string; enrolled: UmrahTravellerTrip[]; campaignPrintHeader: CampaignPrintHeader }) {
+function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, campaignPrintHeader }: { tripId: string; tripName: string; departureDate?: string | null; returnDate?: string | null; enrolled: UmrahTravellerTrip[]; campaignPrintHeader: CampaignPrintHeader }) {
   const qc = useQueryClient()
   const [modal, setModal] = useState<'add' | 'edit' | null>(null)
   const [form, setForm] = useState<InvoiceForm>(EMPTY_INVOICE_FORM)
@@ -2471,9 +2543,25 @@ function InvoicesTab({ tripId, tripName, enrolled, campaignPrintHeader }: { trip
     onSuccess: () => qc.invalidateQueries({ queryKey: ['umrah-invoices', tripId] }),
   })
 
+  useEffect(() => {
+    if (!printInv) return
+    let cancelled = false
+    const clear = () => setPrintInv(null)
+    window.addEventListener('afterprint', clear)
+    void (async () => {
+      const row = await qc.ensureQueryData({ queryKey: ['campaign-print-header'], queryFn: fetchCampaignPrintRow })
+      await waitForLogo((row?.logo_url ?? '').trim() || null)
+      await new Promise(r => setTimeout(r, 80))
+      if (!cancelled) window.print()
+    })()
+    return () => {
+      cancelled = true
+      window.removeEventListener('afterprint', clear)
+    }
+  }, [printInv, qc])
+
   const handlePrint = (inv: UmrahInvoice) => {
     setPrintInv(inv)
-    setTimeout(() => window.print(), 50)
   }
 
   const updateLine = (key: string, patch: Partial<InvoiceLineDraft>) => {
@@ -2744,7 +2832,7 @@ function InvoicesTab({ tripId, tripName, enrolled, campaignPrintHeader }: { trip
     {/* Print-only invoice */}
     {printInv && (
       <div id="umrah-invoice-print" className="hidden print:block" dir="rtl">
-        <PrintCampaignHeader header={campaignPrintHeader} />
+        <PrintCampaignHeader header={campaignPrintHeader} departureDate={departureDate} returnDate={returnDate} />
         <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>فاتورة</h1>
         <p style={{ fontSize: '13px', marginBottom: '4px' }}>رقم الفاتورة: {printInv.invoice_number ?? '—'}</p>
         <p style={{ fontSize: '13px', marginBottom: '4px' }}>التاريخ: {printInv.invoice_date ?? '—'}</p>
@@ -2855,7 +2943,7 @@ function manifestCell(m: UmrahManifestEntry, key: ManifestColumnKey): string {
   return m.notes || t?.notes || ''
 }
 
-function ManifestTab({ tripId, tripName, campaignPrintHeader }: { tripId: string; tripName: string; campaignPrintHeader: CampaignPrintHeader }) {
+function ManifestTab({ tripId, tripName, departureDate, returnDate, campaignPrintHeader }: { tripId: string; tripName: string; departureDate?: string | null; returnDate?: string | null; campaignPrintHeader: CampaignPrintHeader }) {
   const qc = useQueryClient()
   const [travellerSearch, setSearch] = useState('')
   const [showPicker, setShowPicker] = useState(false)
@@ -2908,14 +2996,23 @@ function ManifestTab({ tripId, tripName, campaignPrintHeader }: { tripId: string
 
   useEffect(() => {
     if (!printFilter) return
+    let cancelled = false
     const clear = () => setPrintFilter(null)
     window.addEventListener('afterprint', clear)
-    return () => window.removeEventListener('afterprint', clear)
-  }, [printFilter])
+    void (async () => {
+      const row = await qc.ensureQueryData({ queryKey: ['campaign-print-header'], queryFn: fetchCampaignPrintRow })
+      await waitForLogo((row?.logo_url ?? '').trim() || null)
+      await new Promise(r => setTimeout(r, 80))
+      if (!cancelled) window.print()
+    })()
+    return () => {
+      cancelled = true
+      window.removeEventListener('afterprint', clear)
+    }
+  }, [printFilter, qc])
 
   const handlePrint = (filter: 'all' | 'bahraini' | 'non-bahraini') => {
     setPrintFilter(filter)
-    setTimeout(() => window.print(), 50)
   }
 
   const resetAddFlow = () => {
@@ -3141,7 +3238,7 @@ function ManifestTab({ tripId, tripName, campaignPrintHeader }: { tripId: string
     {/* Print-only manifest sheet */}
     {printFilter && (
       <div id="umrah-manifest-print" className="hidden print:block" dir="rtl">
-        <PrintCampaignHeader header={campaignPrintHeader} />
+        <PrintCampaignHeader header={campaignPrintHeader} departureDate={departureDate} returnDate={returnDate} />
         <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px', color: '#000' }}>{tripName}</h1>
         <p style={{ fontSize: '13px', marginBottom: '16px', color: '#000' }}>{printSubtitle}</p>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', color: '#000' }}>
