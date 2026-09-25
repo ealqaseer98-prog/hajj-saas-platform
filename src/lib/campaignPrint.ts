@@ -20,22 +20,43 @@ export function campaignHeaderText(row: CampaignPrintRow | null | undefined): st
 async function currentUserCampaignId(): Promise<string | null> {
   const storeUser = useAuthStore.getState().user
   const fromStore = storeUser?.campaign_id?.trim()
-  if (fromStore) return fromStore
+  console.log('[campaign-id] store user', storeUser)
+  console.log('[campaign-id] store campaign_id', storeUser?.campaign_id, 'fromStore', fromStore)
+  if (fromStore) {
+    console.log('[campaign-id] return from store', fromStore)
+    return fromStore
+  }
 
   const { data: sessionData } = await supabase.auth.getSession()
   const session = sessionData.session
   const fromJwt = (session?.user.app_metadata?.campaign_id as string | undefined)?.trim()
-  if (fromJwt) return fromJwt
+  console.log('[campaign-id] session', session)
+  console.log('[campaign-id] JWT app_metadata', session?.user.app_metadata)
+  console.log('[campaign-id] JWT app_metadata.campaign_id', fromJwt)
+  if (fromJwt) {
+    console.log('[campaign-id] return from JWT', fromJwt)
+    return fromJwt
+  }
 
   const userId = session?.user.id ?? storeUser?.id
-  if (!userId) return null
+  console.log('[campaign-id] resolved userId', userId, {
+    sessionUserId: session?.user.id,
+    storeUserId: storeUser?.id,
+  })
+  if (!userId) {
+    console.log('[campaign-id] no userId, return null')
+    return null
+  }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('campaign_id')
     .eq('id', userId)
     .maybeSingle()
-  return (profile?.campaign_id as string | undefined)?.trim() || null
+  console.log('[campaign-id] profiles query', { profile, profileError, userId })
+  const fromProfile = (profile?.campaign_id as string | undefined)?.trim() || null
+  console.log('[campaign-id] final return', fromProfile)
+  return fromProfile
 }
 
 export async function fetchCampaignPrintRow(): Promise<CampaignPrintRow | null> {
