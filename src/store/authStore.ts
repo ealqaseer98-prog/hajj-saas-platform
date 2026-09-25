@@ -41,7 +41,7 @@ export const useAuthStore = create<AuthState>()(
           // full_name lives in the profiles table, not the JWT
           const { data: profile } = await supabase
             .from('profiles')
-            .select('full_name')
+            .select('full_name, campaign_id')
             .eq('id', data.session.user.id)
             .single()
 
@@ -50,7 +50,7 @@ export const useAuthStore = create<AuthState>()(
             username:    data.session.user.email ?? email,
             full_name:   profile?.full_name ?? data.session.user.email ?? email,
             role:        (appMeta.role as AppUser['role']) ?? 'admin',
-            campaign_id: appMeta.campaign_id,
+            campaign_id: appMeta.campaign_id ?? profile?.campaign_id,
           }
 
           set({ user, loading: false })
@@ -82,7 +82,7 @@ export const useAuthStore = create<AuthState>()(
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('full_name')
+          .select('full_name, campaign_id')
           .eq('id', data.session.user.id)
           .single()
 
@@ -91,7 +91,7 @@ export const useAuthStore = create<AuthState>()(
           username:    data.session.user.email ?? '',
           full_name:   profile?.full_name ?? data.session.user.email ?? '',
           role:        (appMeta.role as AppUser['role']) ?? 'admin',
-          campaign_id: appMeta.campaign_id,
+          campaign_id: appMeta.campaign_id ?? profile?.campaign_id,
         }
 
         set({ user })

@@ -18,12 +18,24 @@ export function campaignHeaderText(row: CampaignPrintRow | null | undefined): st
 }
 
 async function currentUserCampaignId(): Promise<string | null> {
-  const fromStore = useAuthStore.getState().user?.campaign_id?.trim()
+  const storeUser = useAuthStore.getState().user
+  const fromStore = storeUser?.campaign_id?.trim()
   if (fromStore) return fromStore
 
   const { data: sessionData } = await supabase.auth.getSession()
-  const fromJwt = (sessionData.session?.user.app_metadata?.campaign_id as string | undefined)?.trim()
-  return fromJwt || null
+  const session = sessionData.session
+  const fromJwt = (session?.user.app_metadata?.campaign_id as string | undefined)?.trim()
+  if (fromJwt) return fromJwt
+
+  const userId = session?.user.id ?? storeUser?.id
+  if (!userId) return null
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('campaign_id')
+    .eq('id', userId)
+    .maybeSingle()
+  return (profile?.campaign_id as string | undefined)?.trim() || null
 }
 
 export async function fetchCampaignPrintRow(): Promise<CampaignPrintRow | null> {
