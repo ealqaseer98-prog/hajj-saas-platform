@@ -72,33 +72,64 @@ function parseInputNum(raw: string): number | undefined {
   return Number.isNaN(n) ? undefined : n
 }
 
-function useCampaignPrintHeader() {
+type CampaignPrintHeader = { text: string; logoUrl: string | null }
+
+function useCampaignPrintHeader(): CampaignPrintHeader {
   const campaignId = useAuthStore(s => s.user?.campaign_id)
   const { data } = useQuery({
     queryKey: ['campaign-print-header', campaignId],
     queryFn: async () => {
       const { data } = await supabase
         .from('campaigns')
-        .select('campaign_name_ar, license_number')
+        .select('campaign_name_ar, license_number, logo_url')
         .eq('id', campaignId!)
         .maybeSingle()
-      return (data ?? null) as { campaign_name_ar: string | null; license_number: string | null } | null
+      return (data ?? null) as {
+        campaign_name_ar: string | null
+        license_number: string | null
+        logo_url: string | null
+      } | null
     },
     enabled: !!campaignId,
   })
   const name = (data?.campaign_name_ar ?? '').trim()
   const license = (data?.license_number ?? '').trim()
-  if (!name) return ''
-  if (!license) return name
-  return `${name} - رخصة رقم ${license}`
+  const logoUrl = (data?.logo_url ?? '').trim() || null
+  const text = !name ? '' : !license ? name : `${name} - رخصة رقم ${license}`
+
+  useEffect(() => {
+    if (!logoUrl) return
+    const img = new Image()
+    img.src = logoUrl
+  }, [logoUrl])
+
+  return { text, logoUrl }
 }
 
-function PrintCampaignHeader({ header }: { header: string }) {
-  if (!header) return null
+function PrintCampaignHeader({ header }: { header: CampaignPrintHeader }) {
+  const logoUrl = header.logoUrl
+  if (!logoUrl && !header.text) return null
   return (
-    <p style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px', color: '#000' }}>
-      {header}
-    </p>
+    <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+      {logoUrl && (
+        <img
+          src={logoUrl}
+          alt=""
+          style={{
+            maxHeight: '72px',
+            maxWidth: '220px',
+            objectFit: 'contain',
+            display: 'block',
+            margin: '0 auto 8px',
+          }}
+        />
+      )}
+      {header.text ? (
+        <p style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#000' }}>
+          {header.text}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -134,6 +165,14 @@ export default function UmrahTripWorkspacePage() {
 
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto" dir="rtl">
+      {campaignPrintHeader.logoUrl && (
+        <img
+          src={campaignPrintHeader.logoUrl}
+          alt=""
+          aria-hidden
+          style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+        />
+      )}
       <button onClick={() => navigate('/umrah/trips')}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800">
         <ArrowRight size={16} /> العودة إلى رحلات العمرة
@@ -1237,7 +1276,7 @@ function DistributionTab({ tripId, enrolled }: { tripId: string; enrolled: Umrah
 const EMPTY_INCOME: Partial<UmrahIncome> = { amount: undefined, income_date: '', source: '', notes: '' }
 const EMPTY_EXPENSE: Partial<UmrahExpense> = { amount: undefined, expense_date: '', category: 'other', description: '', notes: '' }
 
-function FinanceTab({ tripId, trip, campaignPrintHeader }: { tripId: string; trip: UmrahTrip; campaignPrintHeader: string }) {
+function FinanceTab({ tripId, trip, campaignPrintHeader }: { tripId: string; trip: UmrahTrip; campaignPrintHeader: CampaignPrintHeader }) {
   const qc = useQueryClient()
   const [incomeModal, setIncomeModal] = useState<'add' | 'edit' | null>(null)
   const [selectedIncome, setSelectedIncome] = useState<Partial<UmrahIncome>>(EMPTY_INCOME)
@@ -2282,7 +2321,7 @@ function invoiceStatus(inv: UmrahInvoice): { label: string; cls: string } {
   return { label: 'غير مدفوعة', cls: 'bg-gray-100 text-gray-600' }
 }
 
-function InvoicesTab({ tripId, tripName, enrolled, campaignPrintHeader }: { tripId: string; tripName: string; enrolled: UmrahTravellerTrip[]; campaignPrintHeader: string }) {
+function InvoicesTab({ tripId, tripName, enrolled, campaignPrintHeader }: { tripId: string; tripName: string; enrolled: UmrahTravellerTrip[]; campaignPrintHeader: CampaignPrintHeader }) {
   const qc = useQueryClient()
   const [modal, setModal] = useState<'add' | 'edit' | null>(null)
   const [form, setForm] = useState<InvoiceForm>(EMPTY_INVOICE_FORM)
@@ -2816,7 +2855,7 @@ function manifestCell(m: UmrahManifestEntry, key: ManifestColumnKey): string {
   return m.notes || t?.notes || ''
 }
 
-function ManifestTab({ tripId, tripName, campaignPrintHeader }: { tripId: string; tripName: string; campaignPrintHeader: string }) {
+function ManifestTab({ tripId, tripName, campaignPrintHeader }: { tripId: string; tripName: string; campaignPrintHeader: CampaignPrintHeader }) {
   const qc = useQueryClient()
   const [travellerSearch, setSearch] = useState('')
   const [showPicker, setShowPicker] = useState(false)
