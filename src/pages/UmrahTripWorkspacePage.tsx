@@ -2338,6 +2338,7 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
   const [form, setForm] = useState<InvoiceForm>(EMPTY_INVOICE_FORM)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [printInv, setPrintInv] = useState<UmrahInvoice | null>(null)
+  const [printCampaign, setPrintCampaign] = useState<CampaignPrintRow | null>(null)
   const [payDraft, setPayDraft] = useState<{ amount: number | undefined; payment_date: string; notes: string }>({
     amount: undefined,
     payment_date: new Date().toISOString().slice(0, 10),
@@ -2486,14 +2487,15 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
     if (!printInv) return
     let cancelled = false
     const prevTitle = document.title
-    applyDocumentTitle(campaign?.campaign_name_ar)
+    applyDocumentTitle(printCampaign?.campaign_name_ar)
     const clear = () => {
       document.title = prevTitle
       setPrintInv(null)
+      setPrintCampaign(null)
     }
     window.addEventListener('afterprint', clear)
     void (async () => {
-      await waitForLogo(campaign?.logo_url)
+      await waitForLogo(printCampaign?.logo_url)
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
       if (!cancelled) window.print()
     })()
@@ -2501,10 +2503,20 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
       cancelled = true
       window.removeEventListener('afterprint', clear)
     }
-  }, [printInv, campaign])
+  }, [printInv, printCampaign])
 
   const handlePrint = async (inv: UmrahInvoice) => {
-    await qc.ensureQueryData({ queryKey: CAMPAIGN_PRINT_QUERY_KEY, queryFn: fetchCampaignPrintRow })
+    let row: CampaignPrintRow | null = campaign
+    try {
+      row = await qc.fetchQuery({
+        queryKey: CAMPAIGN_PRINT_QUERY_KEY,
+        queryFn: fetchCampaignPrintRow,
+        staleTime: 0,
+      })
+    } catch {
+      row = campaign
+    }
+    setPrintCampaign(row ?? null)
     setPrintInv(inv)
   }
 
@@ -2776,7 +2788,7 @@ function InvoicesTab({ tripId, tripName, departureDate, returnDate, enrolled, ca
     {/* Print-only invoice */}
     {printInv && (
       <div id="umrah-invoice-print" className="hidden print:block" dir="rtl">
-        <PrintCampaignHeader campaign={campaign} departureDate={departureDate} returnDate={returnDate} />
+        <PrintCampaignHeader campaign={printCampaign} departureDate={departureDate} returnDate={returnDate} />
         <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>فاتورة</h1>
         <p style={{ fontSize: '13px', marginBottom: '4px' }}>رقم الفاتورة: {printInv.invoice_number ?? '—'}</p>
         <p style={{ fontSize: '13px', marginBottom: '4px' }}>التاريخ: {printInv.invoice_date ?? '—'}</p>

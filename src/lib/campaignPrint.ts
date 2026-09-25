@@ -51,6 +51,5 @@ export function waitForLogo(logoUrl: string | null | undefined): Promise<void> {
 }
 
 export function applyDocumentTitle(name: string | null | undefined) {
-  const n = (name ?? '').trim()
-  document.title = n || 'الحج والعمرة'
+  document.title = (name ?? '').trim()
 }
