@@ -3,8 +3,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Plus, Edit2, Trash2, Users, Plane, Bus, Train, Car } from 'lucide-react'
-import type { Trip, PackageType, TripStatus } from '../types'
+import { Plus, Edit2, Trash2, Users } from 'lucide-react'
+import type { Trip, TripStatus } from '../types'
 
 const STATUS_MAP: Record<TripStatus, { label: string; cls: string }> = {
   upcoming:  { label: 'قادمة',    cls: 'bg-blue-100 text-blue-800'   },
@@ -12,16 +12,30 @@ const STATUS_MAP: Record<TripStatus, { label: string; cls: string }> = {
   completed: { label: 'منتهية',  cls: 'bg-gray-100 text-gray-600'   },
 }
 
-const PKG_MAP: Record<PackageType, string> = {
-  barr:             'البر',
-  tayaran_dammam:   'طيران - الدمام',
-  tayaran_bahrain:  'طيران - البحرين',
-  tasreeh_only:     'فقط تصريح',
+const EMPTY_TRIP: Partial<Trip> = {
+  trip_name: '',
+  status: 'upcoming',
+  max_travellers: 50,
 }
 
-const EMPTY_TRIP: Partial<Trip> = {
-  trip_name: '', package_type: 'tayaran_bahrain',
-  status: 'upcoming', max_travellers: 50,
+function dateOrNull(v: string | null | undefined) {
+  const s = (v ?? '').trim()
+  return s || null
+}
+
+function numOrNull(v: number | string | null | undefined) {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function tripWritePayload(t: Partial<Trip>) {
+  return {
+    trip_name: (t.trip_name ?? '').trim(),
+    departure_date: dateOrNull(t.departure_date),
+    status: t.status || 'upcoming',
+    max_travellers: numOrNull(t.max_travellers),
+  }
 }
 
 export default function TripsPage() {
@@ -54,11 +68,11 @@ export default function TripsPage() {
 
   const save = useMutation({
     mutationFn: async (t: Partial<Trip>) => {
+      const payload = tripWritePayload(t)
       if (modal === 'add') {
-        await supabase.from('trips').insert(t).throwOnError()
+        await supabase.from('trips').insert(payload).throwOnError()
       } else {
-        const { id, created_at, ...rest } = t as Trip
-        await supabase.from('trips').update(rest).eq('id', id).throwOnError()
+        await supabase.from('trips').update(payload).eq('id', (t as Trip).id).throwOnError()
       }
     },
     onSuccess: () => {
@@ -102,14 +116,9 @@ export default function TripsPage() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_MAP[trip.status].cls}`}>
                       {STATUS_MAP[trip.status].label}
                     </span>
-                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs">
-                      {PKG_MAP[trip.package_type]}
-                    </span>
                   </div>
                   {trip.departure_date && (
-                    <p className="text-sm text-gray-500">
-                      من {trip.departure_date} إلى {trip.return_date ?? '—'}
-                    </p>
+                    <p className="text-sm text-gray-500">المغادرة: {trip.departure_date}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -158,33 +167,14 @@ export default function TripsPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">السنة</label>
-                  <input className={ic} type="number" value={selected.year ?? ''}
-                    onChange={e => setSelected(s => ({ ...s, year: +e.target.value }))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">الباقة</label>
-                  <select className={ic} value={selected.package_type}
-                    onChange={e => setSelected(s => ({ ...s, package_type: e.target.value as PackageType }))}>
-                    <option value="barr">البر</option>
-                    <option value="tayaran_dammam">طيران - الدمام</option>
-                    <option value="tayaran_bahrain">طيران - البحرين</option>
-                  </select>
-                </div>
-                <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">تاريخ المغادرة</label>
                   <input className={ic} type="date" value={selected.departure_date ?? ''}
                     onChange={e => setSelected(s => ({ ...s, departure_date: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">تاريخ العودة</label>
-                  <input className={ic} type="date" value={selected.return_date ?? ''}
-                    onChange={e => setSelected(s => ({ ...s, return_date: e.target.value }))} />
-                </div>
-                <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">الحد الأقصى للحاجين</label>
-                  <input className={ic} type="number" value={selected.max_travellers ?? 50}
-                    onChange={e => setSelected(s => ({ ...s, max_travellers: +e.target.value }))} />
+                  <input className={ic} type="number" value={selected.max_travellers ?? ''}
+                    onChange={e => setSelected(s => ({ ...s, max_travellers: e.target.value === '' ? undefined : +e.target.value }))} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">الحالة</label>
