@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { Plus, Trash2, FileText, Receipt as ReceiptIcon, TrendingDown, Printer, Edit2, Search, Eye, RefreshCw, FileDown } from 'lucide-react'
 import type { Invoice, Receipt, Expense, Traveller, Trip, Account, ExpenseCategory } from '../types'
+import { campaignHeaderText, fetchCampaignPrintRow, waitForLogo, type CampaignPrintRow } from '../lib/campaignPrint'
 
 type Tab = 'invoices' | 'receipts' | 'expenses'
 type Currency = 'BHD' | 'SAR'
@@ -1058,27 +1059,72 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;')
 }
 
-function openPrintWindow({ docType, rows }: { docType: string; rows: [string, string][] }) {
+function campaignPrintHeaderHtml(campaign: CampaignPrintRow | null): string {
+  const text = campaignHeaderText(campaign)
+  const logoUrl = (campaign?.logo_url ?? '').trim()
+  if (!logoUrl && !text) return ''
+  const logo = logoUrl
+    ? `<img id="campaign-logo" src="${escapeHtml(logoUrl)}" alt="" style="max-height:72px;max-width:220px;object-fit:contain;display:block;margin:0 auto 8px;" />`
+    : ''
+  const title = text
+    ? `<p style="font-size:16px;font-weight:700;margin:0 0 4px;color:#000;">${escapeHtml(text)}</p>`
+    : ''
+  return `<div class="campaign-header" style="text-align:center;margin-bottom:12px;">${logo}${title}</div>`
+}
+
+function printWhenReadyScript(): string {
+  return `<script>
+    function printWhenReady() {
+      var logo = document.getElementById('campaign-logo');
+      var done = false;
+      var go = function() {
+        if (done) return;
+        done = true;
+        window.print();
+        setTimeout(function() { window.close(); }, 500);
+      };
+      if (!logo) { setTimeout(go, 50); return; }
+      if (logo.complete) { setTimeout(go, 50); return; }
+      logo.onload = go;
+      logo.onerror = go;
+      setTimeout(go, 2000);
+    }
+    window.onload = printWhenReady;
+  </script>`
+}
+
+async function openPrintWindow({ docType, rows }: { docType: string; rows: [string, string][] }) {
+  let campaign: CampaignPrintRow | null = null
+  try {
+    campaign = await fetchCampaignPrintRow()
+  } catch {
+    campaign = null
+  }
+  await waitForLogo(campaign?.logo_url)
+
   const win = window.open('', '_blank', 'width=1100,height=800')
   if (!win) return
   const todayText = new Date().toLocaleDateString('ar-BH')
   const tableRows = rows
     .map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value || '—')}</td></tr>`)
     .join('')
+  const headerHtml = campaignPrintHeaderHtml(campaign)
+  const pageTitle = campaignHeaderText(campaign) || docType
 
   win.document.write(`
     <!doctype html>
     <html dir="rtl" lang="ar">
     <head>
       <meta charset="UTF-8" />
-      <title>${escapeHtml(docType)}</title>
+      <title>${escapeHtml(pageTitle)}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com">
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
       <style>
-        @page { size: A4; margin: 10mm; }
+        @page { size: A4; margin: 0.4in; }
         * { box-sizing: border-box; font-family: 'Noto Naskh Arabic', Arial, sans-serif; }
         body { margin: 0; padding: 24px; color: #111827; }
+        .campaign-header { text-align: center; margin-bottom: 12px; }
         .title { text-align: center; margin-bottom: 4px; font-size: 24px; font-weight: 700; }
         .subtitle { text-align: center; margin-bottom: 2px; font-size: 18px; color: #374151; }
         .date { text-align: center; margin: 0 0 14px; font-size: 13px; color: #6b7280; }
@@ -1089,10 +1135,11 @@ function openPrintWindow({ docType, rows }: { docType: string; rows: [string, st
       </style>
     </head>
     <body>
+      ${headerHtml}
       <h2 class="subtitle">${escapeHtml(docType)}</h2>
       <p class="date">التاريخ: ${escapeHtml(todayText)}</p>
       <table><tbody>${tableRows}</tbody></table>
-      <script>window.onload = () => { setTimeout(() => { window.print(); setTimeout(() => window.close(), 500); }, 900); }</script>
+      ${printWhenReadyScript()}
     </body>
     </html>
   `)
@@ -1194,7 +1241,7 @@ async function fetchAccounts() {
 }
 
 async function nextNumber(table: string, column: string, prefix: string): Promise<string> {
-  const hijriYear = '1447'
+  const hijriYear = '1448'
   const fullPrefix = `${prefix}-${hijriYear}-`
   const { data } = await supabase
     .from(table)

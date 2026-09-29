@@ -30,12 +30,12 @@ async function nextAdahiExpenseNumber(): Promise<string> {
   const { data } = await supabase
     .from('expenses')
     .select('expense_number')
-    .ilike('expense_number', 'EXP-1447-%')
+    .ilike('expense_number', 'EXP-1448-%')
     .order('expense_number', { ascending: false })
     .limit(1)
   const last = data?.[0]?.expense_number
   const lastNum = last ? parseInt(last.split('-').pop() ?? '0', 10) : 0
-  return `EXP-1447-${String(lastNum + 1).padStart(3, '0')}`
+  return `EXP-1448-${String(lastNum + 1).padStart(3, '0')}`
 }
 
 type ListFilter = 'all' | 'paid' | 'wakala_only' | 'complete'
@@ -248,14 +248,14 @@ export default function AdahiPage() {
       const { data: lastInvData } = await supabase
         .from('invoices')
         .select('invoice_number')
-        .ilike('invoice_number', 'ADH-1447-%')
+        .ilike('invoice_number', 'ADH-1448-%')
         .order('invoice_number', { ascending: false })
         .limit(1)
 
       const lastNum = lastInvData?.[0]?.invoice_number
         ? parseInt(lastInvData[0].invoice_number.split('-').pop() ?? '0', 10)
         : 0
-      const invNum = `ADH-1447-${String(lastNum + 1).padStart(3, '0')}`
+      const invNum = `ADH-1448-${String(lastNum + 1).padStart(3, '0')}`
 
       const { data: inv, error: invErr } = await supabase
         .from('invoices')
