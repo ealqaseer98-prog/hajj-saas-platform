@@ -395,19 +395,29 @@ function ReceiptsTab() {
 
   const { data: travellers = [] } = useQuery({ queryKey: ['travellers-list'], queryFn: fetchTravellers })
   const receiptModalTravellerId = (sel.traveller_id ?? '').toString().trim()
-  const { data: invoices = [] } = useQuery({
-    queryKey: ['invoices-list', 'receipt-modal', receiptModalTravellerId || 'all'],
+  const keepInvoiceId = (sel.invoice_id || editingReceipt?.invoice_id || '').toString().trim()
+  const { data: invoices = [], isFetching: invoicesFetching, isSuccess: invoicesLoaded } = useQuery({
+    queryKey: ['invoices-list', 'receipt-modal', receiptModalTravellerId || 'all', keepInvoiceId || 'none'],
     queryFn: async () => {
       let q = supabase
         .from('invoices')
-        .select('id, invoice_number, amount, amount_paid, currency')
+        .select('id, invoice_number, amount, amount_paid, currency, traveller_id, traveller:travellers(full_name_ar)')
         .in('status', ['unpaid', 'partial'])
       if (receiptModalTravellerId) {
         q = q.eq('traveller_id', receiptModalTravellerId)
       }
       const { data, error } = await q.order('issue_date', { ascending: false })
       if (error) throw error
-      return (data ?? []) as any[]
+      const rows = (data ?? []) as any[]
+      if (keepInvoiceId && !rows.some((i: any) => i.id === keepInvoiceId)) {
+        const { data: extra } = await supabase
+          .from('invoices')
+          .select('id, invoice_number, amount, amount_paid, currency, traveller_id, traveller:travellers(full_name_ar)')
+          .eq('id', keepInvoiceId)
+          .maybeSingle()
+        if (extra) rows.unshift(extra)
+      }
+      return rows
     },
     enabled: modal,
   })
@@ -429,37 +439,45 @@ function ReceiptsTab() {
     : travellers
 
   useEffect(() => {
-    if (!modal || !sel.invoice_id) return
+    if (!modal || !sel.invoice_id || invoicesFetching || !invoicesLoaded) return
     const ids = new Set(invoices.map((i: any) => i.id))
     if (!ids.has(sel.invoice_id)) {
       setSel(s => ({ ...s, invoice_id: '', amount: undefined }))
     }
-  }, [modal, invoices, sel.invoice_id])
+  }, [modal, invoices, invoicesFetching, invoicesLoaded, sel.invoice_id])
 
-  const receiptModalInvoice = sel.invoice_id
-    ? invoices.find((i: any) => i.id === sel.invoice_id)
+  const selectedInvoiceId = String(sel.invoice_id ?? '').trim()
+  const invoiceIsValid = !!selectedInvoiceId && invoices.some((i: any) => i.id === selectedInvoiceId)
+
+  const receiptModalInvoice = selectedInvoiceId
+    ? invoices.find((i: any) => i.id === selectedInvoiceId)
     : undefined
 
   const save = useMutation({
     mutationFn: async ({ data, receipt }: { data: Partial<Receipt>; receipt: any | null }) => {
+      const invoiceId = String(data.invoice_id ?? '').trim()
+      const inv = invoices.find((i: any) => i.id === invoiceId)
+      if (!invoiceId || !inv) throw new Error('يجب اختيار فاتورة')
+      const travellerId = String(data.traveller_id || inv.traveller_id || '').trim() || null
+      const accountId = String(data.account_id ?? '').trim() || null
+      const payload = {
+        amount: data.amount,
+        currency: 'BHD' as const,
+        payment_method: data.payment_method,
+        payment_date: data.payment_date,
+        notes: data.notes || null,
+        invoice_id: inv.id,
+        traveller_id: travellerId,
+        account_id: accountId,
+      }
       if (receipt?.id) {
-        await supabase.from('receipts').update({
-          ...data,
-          currency: 'BHD',
-          traveller_id: data.traveller_id || null,
-          invoice_id: data.invoice_id || null,
-          account_id: data.account_id || null,
-        }).eq('id', receipt.id).throwOnError()
+        await supabase.from('receipts').update(payload).eq('id', receipt.id).throwOnError()
         return
       }
       const num = await nextNumber('receipts', 'receipt_number', 'RCP')
       await supabase.from('receipts').insert({
-        ...data,
+        ...payload,
         receipt_number: num,
-        currency: 'BHD',
-        traveller_id: data.traveller_id || null,
-        invoice_id:   data.invoice_id   || null,
-        account_id:   data.account_id   || null,
       }).throwOnError()
     },
     onSuccess: () => {
@@ -581,7 +599,16 @@ function ReceiptsTab() {
       )}
 
       {modal && (
-        <Modal title={editingReceipt ? 'تعديل الإيصال' : 'إيصال دفع جديد'} onClose={() => { setModal(false); setEditingReceipt(null) }} onSave={() => save.mutate({ data: sel, receipt: editingReceipt })} saving={save.isPending}>
+        <Modal
+          title={editingReceipt ? 'تعديل الإيصال' : 'إيصال دفع جديد'}
+          onClose={() => { setModal(false); setEditingReceipt(null) }}
+          onSave={() => {
+            if (!invoiceIsValid) return
+            save.mutate({ data: sel, receipt: editingReceipt })
+          }}
+          saving={save.isPending}
+          saveDisabled={!invoiceIsValid}
+        >
           <div className="relative">
             <label className="block text-xs font-medium text-gray-600 mb-1">الحاج</label>
             <input
@@ -608,7 +635,7 @@ function ReceiptsTab() {
               </div>
             )}
           </div>
-          <Select label="الفاتورة" value={sel.invoice_id ?? ''}
+          <Select label="الفاتورة *" value={selectedInvoiceId}
             onChange={v => {
               if (!v) {
                 setSel(s => ({ ...s, invoice_id: '', amount: undefined }))
@@ -616,9 +643,25 @@ function ReceiptsTab() {
               }
               const inv = invoices.find((i: any) => i.id === v)
               const remaining = Math.max(0, Number(inv?.amount ?? 0) - Number(inv?.amount_paid ?? 0))
-              setSel(s => ({ ...s, invoice_id: v, amount: remaining }))
+              setSel(s => ({
+                ...s,
+                invoice_id: v,
+                amount: remaining,
+                traveller_id: inv?.traveller_id || s.traveller_id,
+              }))
+              if (inv?.traveller?.full_name_ar) {
+                setTravellerSearch(inv.traveller.full_name_ar)
+              }
             }}
-            options={invoices.map((i: any) => ({ value: i.id, label: i.invoice_number }))} />
+            options={invoices.map((i: any) => {
+              const cur = (i.currency ?? 'BHD') as Currency
+              const travellerName = i.traveller?.full_name_ar
+              const amountLabel = `${formatCurrencyAmount(Number(i.amount ?? 0), cur)} ${cur}`
+              return {
+                value: i.id,
+                label: [i.invoice_number ?? '—', travellerName, amountLabel].filter(Boolean).join(' — '),
+              }
+            })} />
           {receiptModalInvoice && (() => {
             const inv = receiptModalInvoice
             const cur = (inv.currency ?? 'BHD') as Currency
@@ -1280,14 +1323,14 @@ function Textarea({ label, value, onChange }: { label: string; value: string; on
     <textarea className={ic + ' resize-none'} rows={2} value={value} onChange={e => onChange(e.target.value)} /></div>
 }
 
-function Modal({ title, children, onClose, onSave, saving }: { title: string; children: React.ReactNode; onClose: () => void; onSave: () => void; saving: boolean }) {
+function Modal({ title, children, onClose, onSave, saving, saveDisabled }: { title: string; children: React.ReactNode; onClose: () => void; onSave: () => void; saving: boolean; saveDisabled?: boolean }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-stretch md:items-center justify-center md:p-4 z-50">
       <div className="bg-white w-full h-full rounded-none p-6 space-y-3 overflow-y-auto md:h-auto md:max-w-md md:rounded-2xl md:shadow-2xl md:max-h-[90vh]" dir="rtl">
         <h2 className="text-lg font-bold text-gray-800">{title}</h2>
         {children}
         <div className="flex gap-3 pt-2">
-          <button onClick={onSave} disabled={saving}
+          <button onClick={onSave} disabled={saving || saveDisabled}
             className="flex-1 bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
             {saving ? 'جارٍ الحفظ...' : 'حفظ'}
           </button>
