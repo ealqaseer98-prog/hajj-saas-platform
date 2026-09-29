@@ -4,12 +4,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Plus, Edit2, Trash2, Users } from 'lucide-react'
-import type { Trip, TripStatus } from '../types'
+import type { Trip, PackageType, TripStatus } from '../types'
 
 const STATUS_MAP: Record<TripStatus, { label: string; cls: string }> = {
   upcoming:  { label: 'قادمة',    cls: 'bg-blue-100 text-blue-800'   },
   active:    { label: 'جارية',    cls: 'bg-green-100 text-green-800' },
   completed: { label: 'منتهية',  cls: 'bg-gray-100 text-gray-600'   },
+}
+
+const PKG_MAP: Record<PackageType, string> = {
+  barr:            'البر',
+  tayaran_dammam:  'طيران - الدمام',
+  tayaran_bahrain: 'طيران - البحرين',
+  tasreeh_only:    'فقط تصريح',
 }
 
 const EMPTY_TRIP: Partial<Trip> = {
@@ -30,11 +37,13 @@ function numOrNull(v: number | string | null | undefined) {
 }
 
 function tripWritePayload(t: Partial<Trip>) {
+  const packageType = (t.package_type ?? '').trim() || null
   return {
     trip_name: (t.trip_name ?? '').trim(),
     departure_date: dateOrNull(t.departure_date),
     status: t.status || 'upcoming',
     max_travellers: numOrNull(t.max_travellers),
+    package_type: packageType,
   }
 }
 
@@ -116,6 +125,11 @@ export default function TripsPage() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_MAP[trip.status].cls}`}>
                       {STATUS_MAP[trip.status].label}
                     </span>
+                    {trip.package_type && (
+                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs">
+                        {PKG_MAP[trip.package_type] ?? trip.package_type}
+                      </span>
+                    )}
                   </div>
                   {trip.departure_date && (
                     <p className="text-sm text-gray-500">المغادرة: {trip.departure_date}</p>
@@ -170,6 +184,16 @@ export default function TripsPage() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">تاريخ المغادرة</label>
                   <input className={ic} type="date" value={selected.departure_date ?? ''}
                     onChange={e => setSelected(s => ({ ...s, departure_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">الباقة</label>
+                  <select className={ic} value={selected.package_type ?? ''}
+                    onChange={e => setSelected(s => ({ ...s, package_type: (e.target.value || undefined) as PackageType }))}>
+                    <option value="">—</option>
+                    {(Object.keys(PKG_MAP) as PackageType[]).map(k => (
+                      <option key={k} value={k}>{PKG_MAP[k]}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">الحد الأقصى للحاجين</label>
